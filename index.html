@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Buddy AI</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="app">
+    <header><div class="logo">B</div><div><h1>Buddy AI</h1><p>Your friendly AI assistant</p></div><span class="status">● Online</span></header>
+    <section id="chat" class="chat" aria-live="polite">
+      <div class="bubble buddy">Hey! I'm Buddy. What would you like to talk about?</div>
+    </section>
+    <form id="chat-form">
+      <input id="message" autocomplete="off" placeholder="Message Buddy..." aria-label="Message Buddy" required>
+      <button id="send" type="submit">Send</button>
+    </form>
+    <p class="note">Buddy AI responses are powered by Google Gemini.</p>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

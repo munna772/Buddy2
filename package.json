@@ -1,0 +1,19 @@
+{
+  "name": "buddy-ai-gemini",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Buddy AI backend powered by Google's Gemini API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "dotenv": "^16.4.7"
+  }
+}
