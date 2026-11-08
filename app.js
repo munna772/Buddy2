@@ -32,9 +32,9 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({ message, history })
     });
     const data = await response.json();
-    waiting.remove();
 
     if (!response.ok) throw new Error(data.error || "Request failed.");
+    waiting.remove();
     addBubble(data.reply, "buddy");
     history.push({ role: "user", text: message });
     history.push({ role: "model", text: data.reply });
