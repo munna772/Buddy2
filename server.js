@@ -1,18 +1,24 @@
+
 require("dotenv").config();
 
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
+const { randomUUID } = require("crypto");
 
 const app = express();
 app.set("trust proxy", 1);
+
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+
 app.use(express.json({ limit: "1mb" }));
 
-// Serve frontend files directly from the main repository
+// Serve frontend files
 app.get("/", (_req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
@@ -38,16 +44,49 @@ app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
     service: "Buddy AI",
-    model: MODEL
+    model: MODEL,
+    databaseConfigured: Boolean(
+      SUPABASE_URL && SUPABASE_SECRET_KEY
+    )
   });
 });
+
+// Save conversation to Supabase
+async function saveToSupabase(content) {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    console.warn("Supabase environment variables are missing.");
+    return;
+  }
+
+  const response = await fetch(
+    `${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/memories`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_SECRET_KEY,
+        "Authorization": `Bearer ${SUPABASE_SECRET_KEY}`,
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({
+        id: randomUUID(),
+        content: content
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Supabase save failed: ${error}`);
+  }
+}
 
 // Gemini chat endpoint
 app.post("/api/chat", async (req, res) => {
   try {
     if (!API_KEY) {
       return res.status(500).json({
-        error: "The server is missing GEMINI_API_KEY. Add it to Render environment variables."
+        error: "The server is missing GEMINI_API_KEY."
       });
     }
 
@@ -126,6 +165,14 @@ app.post("/api/chat", async (req, res) => {
       return res.status(502).json({
         error: "Gemini returned an empty response. Please try again."
       });
+    }
+
+    // Save both messages to Supabase
+    try {
+      await saveToSupabase(`User: ${message}`);
+      await saveToSupabase(`Buddy: ${reply}`);
+    } catch (dbError) {
+      console.error("Database error:", dbError.message);
     }
 
     res.json({ reply });
