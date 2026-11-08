@@ -8,7 +8,7 @@ const app = express();
 app.set("trust proxy", 1);
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 app.use(express.json({ limit: "1mb" }));
 
