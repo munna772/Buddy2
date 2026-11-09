@@ -254,7 +254,7 @@ Your goal is to be a reliable, intelligent and genuinely helpful
 personal AI companion.
 `;
 
-// Chat endpoint
+// Chat endpoint with streaming responses
 app.post("/api/chat", requireAccess, async (req, res) => {
   try {
     if (!API_KEY) {
@@ -283,7 +283,7 @@ app.post("/api/chat", requireAccess, async (req, res) => {
     // Retrieve long-term memory
     const savedMemories = await getMemories();
 
-    // Validate previous conversation
+    // Validate conversation history
     const history = normalizeHistory(req.body.history);
 
     const contents = [
@@ -294,9 +294,9 @@ app.post("/api/chat", requireAccess, async (req, res) => {
       }
     ];
 
-    // Request Gemini response
+    // Request Gemini streaming response
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent?key=${encodeURIComponent(API_KEY)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(API_KEY)}`,
       {
         method: "POST",
         headers: {
@@ -330,42 +330,125 @@ Never claim to remember information that is unavailable.`
       }
     );
 
-    const data = await response.json();
-
     if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+
       console.error("Gemini API error:", data?.error);
 
       return res.status(502).json({
-        error:
-          data?.error?.message ||
-          "Gemini request failed."
+        error: data?.error?.message || "Gemini request failed."
       });
     }
 
-    const reply = data?.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
-      .join("")
-      .trim();
-
-    if (!reply) {
+    if (!response.body) {
       return res.status(502).json({
-        error: "Buddy couldn't generate a response. Please try again."
+        error: "Gemini returned an empty stream."
       });
     }
 
-    // Save conversation without interrupting the reply
-    try {
-      await saveToSupabase(
-        `User: ${message}\n\nBuddy: ${reply}`
-      );
-    } catch (error) {
-      console.error("Memory saving failed:", error.message);
+    // Set streaming response headers
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    let buffer = "";
+    let reply = "";
+
+    // Process Gemini streaming events
+    function processLine(line) {
+      const trimmed = line.trim();
+
+      if (!trimmed.startsWith("data:")) return;
+
+      const json = trimmed.slice(5).trim();
+
+      if (!json || json === "[DONE]") return;
+
+      try {
+        const data = JSON.parse(json);
+
+        const text = data?.candidates?.[0]?.content?.parts
+          ?.map(part => part.text || "")
+          .join("");
+
+        if (text) {
+          reply += text;
+
+          res.write(
+            `data: ${JSON.stringify({ text })}\n\n`
+          );
+        }
+      } catch (error) {
+        console.error("Stream parsing error:", error.message);
+      }
     }
 
-    return res.json({ reply });
+    // Read incoming chunks
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        processLine(line);
+      }
+    }
+
+    // Process remaining buffered data
+    buffer += decoder.decode();
+
+    if (buffer.trim()) {
+      processLine(buffer);
+    }
+
+    if (!reply.trim()) {
+      res.write(
+        `data: ${JSON.stringify({
+          error: "Buddy couldn't generate a response."
+        })}\n\n`
+      );
+    } else {
+      // Save complete conversation
+      try {
+        await saveToSupabase(
+          `User: ${message}\n\nBuddy: ${reply}`
+        );
+      } catch (error) {
+        console.error("Memory saving failed:", error.message);
+      }
+    }
+
+    // Tell frontend streaming is complete
+    res.write("data: [DONE]\n\n");
+    res.end();
 
   } catch (error) {
     console.error("Buddy server error:", error.message);
+
+    if (res.headersSent) {
+      if (!res.writableEnded) {
+        res.write(
+          `data: ${JSON.stringify({
+            error: "Buddy's response was interrupted. Please try again."
+          })}\n\n`
+        );
+        res.end();
+      }
+
+      return;
+    }
 
     if (
       error.name === "TimeoutError" ||
