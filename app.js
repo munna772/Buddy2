@@ -1,7 +1,12 @@
+
 const form = document.getElementById("chat-form");
 const input = document.getElementById("message");
 const send = document.getElementById("send");
 const chat = document.getElementById("chat");
+
+if (!form || !input || !send || !chat) {
+  throw new Error("Buddy chat interface elements are missing.");
+}
 
 const history = [];
 
@@ -9,7 +14,31 @@ const MAX_MESSAGE_LENGTH = 4000;
 const MAX_HISTORY = 12;
 const TOKEN_STORAGE_KEY = "buddy_access_token";
 
-// Create chat bubbles safely
+let activeController = null;
+
+// =====================================
+// STOP GENERATION BUTTON
+// =====================================
+
+const stopButton = document.createElement("button");
+
+stopButton.type = "button";
+stopButton.className = send.className;
+stopButton.textContent = "Stop";
+stopButton.hidden = true;
+
+send.insertAdjacentElement("afterend", stopButton);
+
+stopButton.addEventListener("click", () => {
+  if (activeController) {
+    activeController.abort();
+  }
+});
+
+// =====================================
+// CREATE CHAT BUBBLES SAFELY
+// =====================================
+
 function addBubble(text, who) {
   const bubble = document.createElement("div");
 
@@ -22,7 +51,10 @@ function addBubble(text, who) {
   return bubble;
 }
 
-// Get private access token
+// =====================================
+// GET ACCESS TOKEN
+// =====================================
+
 function getAccessToken() {
   let token = localStorage.getItem(TOKEN_STORAGE_KEY);
 
@@ -40,31 +72,30 @@ function getAccessToken() {
   return token;
 }
 
-// Read Gemini streaming response
+// =====================================
+// READ STREAMING RESPONSE
+// =====================================
+
 async function readStream(response, bubble) {
   if (!response.body) {
-    throw new Error("Streaming is not supported by this connection.");
+    throw new Error(
+      "Streaming is not supported by this connection."
+    );
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
 
   let buffer = "";
+  let dataLines = [];
   let reply = "";
   let completed = false;
 
-  function processEvent(event) {
-    const dataLines = [];
-
-    for (const line of event.split(/\r\n|\n|\r/)) {
-      if (line.startsWith("data:")) {
-        dataLines.push(line.slice(5).replace(/^ /, ""));
-      }
-    }
-
+  function dispatchEvent() {
     if (!dataLines.length) return;
 
     const data = dataLines.join("\n");
+    dataLines = [];
 
     if (data.trim() === "[DONE]") {
       completed = true;
@@ -76,18 +107,92 @@ async function readStream(response, bubble) {
     try {
       parsed = JSON.parse(data);
     } catch {
-      throw new Error("Buddy sent an invalid streaming response.");
+      throw new Error(
+        "Buddy sent an invalid streaming response."
+      );
     }
 
     if (parsed.error) {
-      throw new Error(parsed.error);
+      throw new Error(
+        typeof parsed.error === "string"
+          ? parsed.error
+          : parsed.error.message || "Buddy encountered an error."
+      );
     }
 
-    if (typeof parsed.text === "string" && parsed.text.length) {
+    if (
+      typeof parsed.text === "string" &&
+      parsed.text.length > 0
+    ) {
       reply += parsed.text;
 
       bubble.textContent = reply;
       chat.scrollTop = chat.scrollHeight;
+    }
+  }
+
+  function processLine(line) {
+    if (line === "") {
+      dispatchEvent();
+      return;
+    }
+
+    if (line.startsWith(":")) {
+      return;
+    }
+
+    if (line.startsWith("data:")) {
+      dataLines.push(
+        line.slice(5).replace(/^ /, "")
+      );
+    }
+  }
+
+  function consumeLines(final = false) {
+    while (true) {
+      const cr = buffer.indexOf("\r");
+      const lf = buffer.indexOf("\n");
+
+      let index;
+
+      if (cr === -1) {
+        index = lf;
+      } else if (lf === -1) {
+        index = cr;
+      } else {
+        index = Math.min(cr, lf);
+      }
+
+      if (index === -1) break;
+
+      // Wait if a CR might be followed by LF
+      // in the next network chunk.
+      if (
+        buffer[index] === "\r" &&
+        index === buffer.length - 1 &&
+        !final
+      ) {
+        break;
+      }
+
+      const line = buffer.slice(0, index);
+
+      const separatorLength =
+        buffer[index] === "\r" &&
+        buffer[index + 1] === "\n"
+          ? 2
+          : 1;
+
+      buffer = buffer.slice(
+        index + separatorLength
+      );
+
+      processLine(line);
+    }
+
+    if (final && buffer.length > 0) {
+      processLine(buffer);
+      buffer = "";
     }
   }
 
@@ -97,29 +202,32 @@ async function readStream(response, bubble) {
 
       if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
+      buffer += decoder.decode(value, {
+        stream: true
+      });
 
-      const events = buffer.split(/\r?\n\r?\n/);
-
-      buffer = events.pop() || "";
-
-      for (const event of events) {
-        processEvent(event);
-      }
+      consumeLines();
     }
 
     buffer += decoder.decode();
 
-    if (buffer.trim()) {
-      processEvent(buffer);
+    consumeLines(true);
+
+    // A final blank line dispatches the last SSE event.
+    if (dataLines.length) {
+      dispatchEvent();
     }
 
     if (!completed) {
-      throw new Error("Buddy's response was interrupted.");
+      throw new Error(
+        "Buddy's response was interrupted."
+      );
     }
 
     if (!reply.trim()) {
-      throw new Error("Buddy returned an empty response.");
+      throw new Error(
+        "Buddy returned an empty response."
+      );
     }
 
     return reply;
@@ -134,17 +242,27 @@ async function readStream(response, bubble) {
     throw error;
 
   } finally {
-    reader.releaseLock();
+    try {
+      reader.releaseLock();
+    } catch {
+      // Reader may already be released.
+    }
   }
 }
 
-// Send messages
+// =====================================
+// SEND MESSAGE
+// =====================================
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
+  // Prevent another request while Buddy is responding.
+  if (activeController) return;
+
   const message = input.value.trim();
 
-  if (!message || send.disabled) return;
+  if (!message) return;
 
   if (message.length > MAX_MESSAGE_LENGTH) {
     addBubble(
@@ -157,30 +275,41 @@ form.addEventListener("submit", async (event) => {
   const userBubble = addBubble(message, "user");
 
   input.value = "";
+
   send.disabled = true;
   send.textContent = "...";
+
+  stopButton.hidden = false;
+  stopButton.disabled = false;
 
   const waiting = addBubble(
     "Buddy is thinking...",
     "buddy"
   );
 
+  const controller = new AbortController();
+  activeController = controller;
+
   try {
     const token = getAccessToken();
 
     const response = await fetch("/api/chat", {
       method: "POST",
+
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`
       },
+
       body: JSON.stringify({
         message,
         history: history.slice(-MAX_HISTORY)
-      })
+      }),
+
+      signal: controller.signal
     });
 
-    // Handle invalid authentication
+    // Authentication error
     if (response.status === 401) {
       localStorage.removeItem(TOKEN_STORAGE_KEY);
 
@@ -189,12 +318,23 @@ form.addEventListener("submit", async (event) => {
       );
     }
 
-    // Handle server errors
+    // Quota error
+    if (response.status === 429) {
+      const data = await response.json().catch(() => ({}));
+
+      throw new Error(
+        data.error ||
+        "Buddy has reached its usage limit. Please try again later."
+      );
+    }
+
+    // Other server errors
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
 
       throw new Error(
-        data.error || `Server error (${response.status}).`
+        data.error ||
+        `Server error (${response.status}).`
       );
     }
 
@@ -211,13 +351,13 @@ form.addEventListener("submit", async (event) => {
     // Receive response progressively
     const reply = await readStream(response, waiting);
 
-    // Save only completed conversations
+    // Save completed conversation
     history.push(
       { role: "user", text: message },
       { role: "model", text: reply }
     );
 
-    // Keep recent conversation history
+    // Keep recent history
     if (history.length > MAX_HISTORY) {
       history.splice(
         0,
@@ -226,22 +366,42 @@ form.addEventListener("submit", async (event) => {
     }
 
   } catch (error) {
+    // Handle intentional stopping
+    if (controller.signal.aborted) {
+      const partial = waiting.textContent;
+
+      waiting.textContent =
+        partial === "Buddy is thinking..."
+          ? "Generation stopped."
+          : `${partial}\n\nGeneration stopped.`;
+
+      return;
+    }
+
     // Restore failed message for retry
     input.value = message;
 
-    // Avoid duplicate user messages on retry
+    // Avoid duplicate user messages
     userBubble.remove();
 
-    // Preserve any partial answer for reference
-    waiting.textContent = waiting.textContent === "Buddy is thinking..."
-      ? `Sorry, I couldn't reply: ${error.message}`
-      : `${waiting.textContent}\n\nResponse interrupted: ${error.message}`;
+    const partial = waiting.textContent;
+
+    waiting.textContent =
+      partial === "Buddy is thinking..."
+        ? `Sorry, I couldn't reply: ${error.message}`
+        : `${partial}\n\nResponse interrupted: ${error.message}`;
 
     console.error("Buddy error:", error);
 
   } finally {
+    activeController = null;
+
     send.disabled = false;
     send.textContent = "Send";
+
+    stopButton.hidden = true;
+    stopButton.disabled = false;
+
     input.focus();
   }
 });
