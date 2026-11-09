@@ -105,7 +105,7 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    const contents = [];
+    const savedMemories = await getMemories();const contents = [];
 
     for (const item of history.slice(-12)) {
       if (!item || typeof item.text !== "string") continue;
