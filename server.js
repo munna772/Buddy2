@@ -52,6 +52,38 @@ app.get("/api/health", (_req, res) => {
 });
 
 // Save conversation to Supabase
+async function getMemories() {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    return "";
+  }
+
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/memories?select=content&order=created_at.desc&limit=30`,
+      {
+        headers: {
+          "apikey": SUPABASE_SECRET_KEY,
+          "Authorization": `Bearer ${SUPABASE_SECRET_KEY}`
+        }
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    const memories = await response.json();
+
+    return memories
+      .map(item => item.content)
+      .filter(Boolean)
+      .reverse()
+      .join("\n");
+  } catch (error) {
+    console.error("Memory retrieval failed:", error.message);
+    return "";
+  }
+}
 async function saveToSupabase(content) {
   if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
     console.warn("Supabase environment variables are missing.");
