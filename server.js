@@ -15,6 +15,11 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const ACCESS_TOKEN = process.env.BUDDY_ACCESS_TOKEN;
+if (!ACCESS_TOKEN || Buffer.byteLength(ACCESS_TOKEN, "utf8") < 32) {
+  throw new Error(
+    "BUDDY_ACCESS_TOKEN must be at least 32 bytes long."
+  );
+}
 
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_HISTORY = 12;
