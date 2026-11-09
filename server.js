@@ -6,17 +6,27 @@ const path = require("path");
 const { randomUUID, timingSafeEqual } = require("crypto");
 
 const app = express();
+
 app.set("trust proxy", 1);
 
+// =====================================
+// CONFIGURATION
+// =====================================
+
 const PORT = process.env.PORT || 3000;
+
 const API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+
 const ACCESS_TOKEN = process.env.BUDDY_ACCESS_TOKEN;
 
-if (!ACCESS_TOKEN || Buffer.byteLength(ACCESS_TOKEN, "utf8") < 32) {
+if (
+  !ACCESS_TOKEN ||
+  Buffer.byteLength(ACCESS_TOKEN, "utf8") < 32
+) {
   throw new Error(
     "BUDDY_ACCESS_TOKEN must be at least 32 bytes long."
   );
@@ -27,9 +37,16 @@ const MAX_HISTORY = 12;
 const MEMORY_LIMIT = 30;
 const REQUEST_TIMEOUT = 45000;
 
+// =====================================
+// MIDDLEWARE
+// =====================================
+
 app.use(express.json({ limit: "1mb" }));
 
-// Serve frontend
+// =====================================
+// SERVE FRONTEND
+// =====================================
+
 app.get("/", (_req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
@@ -42,15 +59,24 @@ app.get("/style.css", (_req, res) => {
   res.sendFile(path.join(__dirname, "style.css"));
 });
 
-// API rate limiting
-app.use("/api/", rateLimit({
-  windowMs: 60 * 1000,
-  limit: 20,
-  standardHeaders: "draft-7",
-  legacyHeaders: false
-}));
+// =====================================
+// API RATE LIMITING
+// =====================================
 
-// Health check
+app.use(
+  "/api/",
+  rateLimit({
+    windowMs: 60 * 1000,
+    limit: 20,
+    standardHeaders: "draft-7",
+    legacyHeaders: false
+  })
+);
+
+// =====================================
+// HEALTH CHECK
+// =====================================
+
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
@@ -64,9 +90,13 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-// Authentication middleware
+// =====================================
+// AUTHENTICATION
+// =====================================
+
 function requireAccess(req, res, next) {
-  const authorization = req.get("authorization") || "";
+  const authorization =
+    req.get("authorization") || "";
 
   if (!authorization.startsWith("Bearer ")) {
     return res.status(401).json({
@@ -92,7 +122,10 @@ function requireAccess(req, res, next) {
   next();
 }
 
-// Retrieve saved memories
+// =====================================
+// RETRIEVE SAVED MEMORIES
+// =====================================
+
 async function getMemories() {
   if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
     return "";
@@ -120,20 +153,28 @@ async function getMemories() {
 
     return records
       .map(record => record.content)
-      .filter(content =>
-        typeof content === "string" && content
+      .filter(
+        content =>
+          typeof content === "string" && content
       )
       .reverse()
       .join("\n\n")
       .slice(-16000);
 
   } catch (error) {
-    console.error("Memory retrieval failed:", error.message);
+    console.error(
+      "Memory retrieval failed:",
+      error.message
+    );
+
     return "";
   }
 }
 
-// Save completed conversation
+// =====================================
+// SAVE COMPLETED CONVERSATION
+// =====================================
+
 async function saveToSupabase(content) {
   if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
     console.warn("Supabase is not configured.");
@@ -169,9 +210,14 @@ async function saveToSupabase(content) {
   return true;
 }
 
-// Normalize conversation history
+// =====================================
+// NORMALIZE CONVERSATION HISTORY
+// =====================================
+
 function normalizeHistory(rawHistory) {
-  if (!Array.isArray(rawHistory)) return [];
+  if (!Array.isArray(rawHistory)) {
+    return [];
+  }
 
   const result = [];
   let expectedRole = "user";
@@ -186,13 +232,17 @@ function normalizeHistory(rawHistory) {
       continue;
     }
 
-    if (item.role !== expectedRole) continue;
+    if (item.role !== expectedRole) {
+      continue;
+    }
 
     result.push({
       role: item.role,
-      parts: [{
-        text: item.text.slice(0, MAX_MESSAGE_LENGTH)
-      }]
+      parts: [
+        {
+          text: item.text.slice(0, MAX_MESSAGE_LENGTH)
+        }
+      ]
     });
 
     expectedRole =
@@ -209,7 +259,10 @@ function normalizeHistory(rawHistory) {
   return result;
 }
 
-// Buddy personality
+// =====================================
+// BUDDY PERSONALITY
+// =====================================
+
 const BUDDY_PERSONALITY = `
 You are Buddy, a personal AI companion and intelligent assistant.
 
@@ -255,7 +308,10 @@ Your goal is to be a reliable, intelligent and genuinely helpful
 personal AI companion.
 `;
 
-// Write data safely to the client
+// =====================================
+// SAFE CLIENT WRITING
+// =====================================
+
 async function writeChunk(res, chunk) {
   if (res.destroyed || res.writableEnded) {
     return false;
@@ -266,34 +322,50 @@ async function writeChunk(res, chunk) {
   }
 
   return new Promise(resolve => {
+    let settled = false;
+
     const cleanup = () => {
       res.off("drain", onDrain);
       res.off("close", onClose);
       res.off("error", onError);
     };
 
-    const onDrain = () => {
+    const finish = result => {
+      if (settled) return;
+
+      settled = true;
       cleanup();
-      resolve(!res.destroyed && !res.writableEnded);
+      resolve(result);
+    };
+
+    const onDrain = () => {
+      finish(!res.destroyed && !res.writableEnded);
     };
 
     const onClose = () => {
-      cleanup();
-      resolve(false);
+      finish(false);
     };
 
     const onError = () => {
-      cleanup();
-      resolve(false);
+      finish(false);
     };
 
     res.once("drain", onDrain);
     res.once("close", onClose);
     res.once("error", onError);
+
+    // Check again in case the connection closed
+    // before the listeners were attached.
+    if (res.destroyed || res.writableEnded) {
+      finish(false);
+    }
   });
 }
 
-// Send an SSE event
+// =====================================
+// SEND SERVER-SENT EVENTS
+// =====================================
+
 async function sendSSE(res, payload) {
   return writeChunk(
     res,
@@ -301,21 +373,30 @@ async function sendSSE(res, payload) {
   );
 }
 
-// Parse one Gemini SSE event
+// =====================================
+// PARSE GEMINI SSE EVENTS
+// =====================================
+
 function parseGeminiEvent(event) {
   const dataLines = [];
 
   for (const line of event.split(/\r\n|\n|\r/)) {
     if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).replace(/^ /, ""));
+      dataLines.push(
+        line.slice(5).replace(/^ /, "")
+      );
     }
   }
 
-  if (!dataLines.length) return "";
+  if (!dataLines.length) {
+    return "";
+  }
 
   const data = dataLines.join("\n").trim();
 
-  if (!data || data === "[DONE]") return "";
+  if (!data || data === "[DONE]") {
+    return "";
+  }
 
   const parsed = JSON.parse(data);
 
@@ -325,93 +406,114 @@ function parseGeminiEvent(event) {
     );
   }
 
-  return parsed.candidates?.[0]?.content?.parts
-    ?.map(part => part.text || "")
-    .join("") || "";
+  return (
+    parsed.candidates?.[0]?.content?.parts
+      ?.map(part => part.text || "")
+      .join("") || ""
+  );
 }
 
-// Chat endpoint with streaming
-app.post("/api/chat", requireAccess, async (req, res) => {
-  let controller;
-  let reader;
-  let timeout;
-  let clientDisconnected = false;
+// =====================================
+// CHAT ENDPOINT WITH STREAMING
+// =====================================
 
-  const handleDisconnect = () => {
-    if (!res.writableEnded && !res.destroyed) return;
+app.post(
+  "/api/chat",
+  requireAccess,
+  async (req, res) => {
+    let controller;
+    let reader;
+    let timeout;
 
-    if (!res.writableEnded) {
+    let timedOut = false;
+    let clientDisconnected = false;
+
+    // Detect client disconnection
+    const handleDisconnect = () => {
+      if (res.writableEnded) {
+        return;
+      }
+
       clientDisconnected = true;
 
       if (controller) {
         controller.abort();
       }
-    }
-  };
+    };
 
-  res.on("close", handleDisconnect);
+    res.on("close", handleDisconnect);
 
-  try {
-    if (!API_KEY) {
-      return res.status(500).json({
-        error: "The server is missing GEMINI_API_KEY."
-      });
-    }
-
-    const message =
-      typeof req.body.message === "string"
-        ? req.body.message.trim()
-        : "";
-
-    if (!message) {
-      return res.status(400).json({
-        error: "Please enter a message."
-      });
-    }
-
-    if (message.length > MAX_MESSAGE_LENGTH) {
-      return res.status(400).json({
-        error: "Your message is too long."
-      });
-    }
-
-    // Retrieve long-term memory
-    const savedMemories = await getMemories();
-
-    if (clientDisconnected) return;
-
-    // Validate previous conversation
-    const history = normalizeHistory(req.body.history);
-
-    const contents = [
-      ...history,
-      {
-        role: "user",
-        parts: [{ text: message }]
+    try {
+      // Check Gemini API key
+      if (!API_KEY) {
+        return res.status(500).json({
+          error: "The server is missing GEMINI_API_KEY."
+        });
       }
-    ];
 
-    controller = new AbortController();
+      // Validate user message
+      const message =
+        typeof req.body?.message === "string"
+          ? req.body.message.trim()
+          : "";
 
-    let timedOut = false;
+      if (!message) {
+        return res.status(400).json({
+          error: "Please enter a message."
+        });
+      }
 
-    timeout = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, REQUEST_TIMEOUT);
+      if (message.length > MAX_MESSAGE_LENGTH) {
+        return res.status(400).json({
+          error: "Your message is too long."
+        });
+      }
 
-    // Request Gemini streaming response
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(API_KEY)}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{
-              text: `${BUDDY_PERSONALITY}
+      // Retrieve long-term memory
+      const savedMemories = await getMemories();
+
+      if (clientDisconnected) {
+        return;
+      }
+
+      // Normalize previous conversation
+      const history = normalizeHistory(
+        req.body?.history
+      );
+
+      const contents = [
+        ...history,
+        {
+          role: "user",
+          parts: [{ text: message }]
+        }
+      ];
+
+      // Create request controller
+      controller = new AbortController();
+
+      // Start request timeout
+      timeout = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, REQUEST_TIMEOUT);
+
+      // =================================
+      // GEMINI STREAMING REQUEST
+      // =================================
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(API_KEY)}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [
+                {
+                  text: `${BUDDY_PERSONALITY}
 
 SAVED MEMORIES:
 
@@ -424,80 +526,118 @@ ${savedMemories || "No saved memories available yet."}
 
 Use relevant information naturally.
 Never claim to remember information that is unavailable.`
-            }]
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.75,
-            maxOutputTokens: 1200
-          }
-        }),
-        signal: controller.signal
+                }
+              ]
+            },
+
+            contents,
+
+            generationConfig: {
+              temperature: 0.75,
+              maxOutputTokens: 1200
+            }
+          }),
+
+          signal: controller.signal
+        }
+      );
+
+      // Handle Gemini API errors
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+
+        console.error(
+          "Gemini API error:",
+          data?.error
+        );
+
+        return res.status(502).json({
+          error:
+            data?.error?.message ||
+            "Gemini request failed."
+        });
       }
-    );
 
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
+      if (!response.body) {
+        return res.status(502).json({
+          error: "Gemini returned an empty stream."
+        });
+      }
 
-      console.error("Gemini API error:", data?.error);
+      if (clientDisconnected) {
+        return;
+      }
 
-      return res.status(502).json({
-        error:
-          data?.error?.message ||
-          "Gemini request failed."
-      });
-    }
+      // =================================
+      // START CLIENT STREAM
+      // =================================
 
-    if (!response.body) {
-      return res.status(502).json({
-        error: "Gemini returned an empty stream."
-      });
-    }
+      res.status(200);
 
-    if (clientDisconnected) return;
+      res.setHeader(
+        "Content-Type",
+        "text/event-stream; charset=utf-8"
+      );
 
-    // Start SSE response
-    res.status(200);
-    res.setHeader(
-      "Content-Type",
-      "text/event-stream; charset=utf-8"
-    );
-    res.setHeader(
-      "Cache-Control",
-      "no-cache, no-transform"
-    );
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.flushHeaders();
+      res.setHeader(
+        "Cache-Control",
+        "no-cache, no-transform"
+      );
 
-    reader = response.body.getReader();
+      res.setHeader(
+        "Connection",
+        "keep-alive"
+      );
 
-    const decoder = new TextDecoder();
+      res.setHeader(
+        "X-Accel-Buffering",
+        "no"
+      );
 
-    let buffer = "";
-    let reply = "";
+      res.flushHeaders();
 
-    // Read Gemini stream
-    while (true) {
-      const { done, value } = await reader.read();
+      reader = response.body.getReader();
 
-      if (clientDisconnected) return;
+      const decoder = new TextDecoder();
 
-      if (done) break;
+      let buffer = "";
+      let reply = "";
 
-      buffer += decoder.decode(value, { stream: true });
+      // =================================
+      // READ GEMINI STREAM
+      // =================================
 
-      const events = buffer.split(/\r?\n\r?\n/);
+      while (true) {
+        const { done, value } = await reader.read();
 
-      buffer = events.pop() || "";
+        if (clientDisconnected) {
+          return;
+        }
 
-      for (const event of events) {
-        const text = parseGeminiEvent(event);
+        if (done) {
+          break;
+        }
 
-        if (text) {
+        buffer += decoder.decode(value, {
+          stream: true
+        });
+
+        const events = buffer.split(/\r?\n\r?\n/);
+
+        buffer = events.pop() || "";
+
+        for (const event of events) {
+          const text = parseGeminiEvent(event);
+
+          if (!text) {
+            continue;
+          }
+
           reply += text;
 
-          const written = await sendSSE(res, { text });
+          const written = await sendSSE(res, {
+            text
+          });
 
           if (!written) {
             clientDisconnected = true;
@@ -506,121 +646,169 @@ Never claim to remember information that is unavailable.`
           }
         }
       }
-    }
 
-    // Process final buffered event
-    buffer += decoder.decode();
+      // Process final buffered data
+      buffer += decoder.decode();
 
-    if (buffer.trim()) {
-      const text = parseGeminiEvent(buffer);
+      if (buffer.trim()) {
+        const text = parseGeminiEvent(buffer);
 
-      if (text) {
-        reply += text;
+        if (text) {
+          reply += text;
 
-        const written = await sendSSE(res, { text });
+          const written = await sendSSE(res, {
+            text
+          });
 
-        if (!written) {
-          clientDisconnected = true;
-          return;
+          if (!written) {
+            clientDisconnected = true;
+            controller.abort();
+            return;
+          }
         }
       }
-    }
 
-    if (clientDisconnected) return;
-
-    if (!reply.trim()) {
-      await sendSSE(res, {
-        error: "Buddy couldn't generate a response. Please try again."
-      });
-
-      return;
-    }
-
-    // Save only completed conversation
-    try {
-      await saveToSupabase(
-        `User: ${message}\n\nBuddy: ${reply}`
-      );
-    } catch (error) {
-      console.error(
-        "Memory saving failed:",
-        error.message
-      );
-    }
-
-    if (clientDisconnected) return;
-
-    // Signal successful completion
-    await writeChunk(res, "data: [DONE]\n\n");
-
-    if (!res.writableEnded && !res.destroyed) {
-      res.end();
-    }
-
-  } catch (error) {
-    console.error("Buddy server error:", error.message);
-
-    if (reader) {
-      try {
-        await reader.cancel();
-      } catch {
-        // Reader may already be closed.
+      if (clientDisconnected) {
+        return;
       }
-    }
 
-    if (clientDisconnected || res.destroyed) {
-      return;
-    }
+      // =================================
+      // HANDLE EMPTY RESPONSE
+      // =================================
 
-    const message = timeout &&
-      error.name === "AbortError"
-      ? "Buddy took too long to respond. Please try again."
-      : "Something went wrong. Please try again.";
+      if (!reply.trim()) {
+        await sendSSE(res, {
+          error: "Buddy couldn't generate a response. Please try again."
+        });
 
-    if (res.headersSent) {
-      if (!res.writableEnded) {
-        await sendSSE(res, { error: message });
+        if (!res.writableEnded && !res.destroyed) {
+          res.end();
+        }
+
+        return;
+      }
+
+      // =================================
+      // SAVE COMPLETED CONVERSATION
+      // =================================
+
+      try {
+        await saveToSupabase(
+          `User: ${message}\n\nBuddy: ${reply}`
+        );
+      } catch (error) {
+        console.error(
+          "Memory saving failed:",
+          error.message
+        );
+      }
+
+      if (clientDisconnected) {
+        return;
+      }
+
+      // =================================
+      // SIGNAL SUCCESSFUL COMPLETION
+      // =================================
+
+      const completed = await writeChunk(
+        res,
+        "data: [DONE]\n\n"
+      );
+
+      if (
+        completed &&
+        !res.writableEnded &&
+        !res.destroyed
+      ) {
         res.end();
       }
 
-      return;
-    }
+    } catch (error) {
+      console.error(
+        "Buddy server error:",
+        error.message
+      );
 
-    if (timeout && error.name === "AbortError") {
-      return res.status(504).json({
-        error: message
+      // Cancel upstream stream if possible
+      if (reader) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Reader may already be closed.
+        }
+      }
+
+      if (clientDisconnected || res.destroyed) {
+        return;
+      }
+
+      const errorMessage =
+        timedOut && error.name === "AbortError"
+          ? "Buddy took too long to respond. Please try again."
+          : "Something went wrong. Please try again.";
+
+      // If streaming has already started,
+      // return the error in SSE format.
+      if (res.headersSent) {
+        if (!res.writableEnded && !res.destroyed) {
+          await sendSSE(res, {
+            error: errorMessage
+          });
+
+          if (!res.writableEnded && !res.destroyed) {
+            res.end();
+          }
+        }
+
+        return;
+      }
+
+      if (timedOut && error.name === "AbortError") {
+        return res.status(504).json({
+          error: errorMessage
+        });
+      }
+
+      return res.status(500).json({
+        error: errorMessage
       });
-    }
 
-    return res.status(500).json({
-      error: message
-    });
+    } finally {
+      // Clear timeout
+      if (timeout) {
+        clearTimeout(timeout);
+      }
 
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
+      // Remove disconnect listener
+      res.off("close", handleDisconnect);
 
-    res.off("close", handleDisconnect);
-
-    if (reader) {
-      try {
-        reader.releaseLock();
-      } catch {
-        // Reader may already be released.
+      // Release stream reader
+      if (reader) {
+        try {
+          reader.releaseLock();
+        } catch {
+          // Reader may already be released.
+        }
       }
     }
   }
-});
+);
 
-// Unknown routes
+// =====================================
+// UNKNOWN ROUTES
+// =====================================
+
 app.use((_req, res) => {
   res.status(404).json({
     error: "Page not found."
   });
 });
 
-// Start server
+// =====================================
+// START SERVER
+// =====================================
+
 app.listen(PORT, () => {
   console.log(`Buddy AI running on port ${PORT}`);
 });
