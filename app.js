@@ -126,6 +126,8 @@ form.addEventListener("submit", async (event) => {
     }
 
   } catch (error) {
+    input.value = message;
+
     waiting.textContent =
       `Sorry, I couldn't reply: ${error.message}`;
 
