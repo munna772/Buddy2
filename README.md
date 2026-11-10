@@ -1,63 +1,73 @@
-# Buddy AI — Gemini free-tier backend
+# Buddy AI — Gemini-powered chat backend
 
-This project connects a simple Buddy chat page to Google's Gemini API. The API key stays on the server, not in the browser or Android APK.
+Buddy is a private, single-user chat app backed by a Node.js/Express server and Google's Gemini API. The browser sends requests to this server; the Gemini API key and Supabase secret key must remain on the server.
 
-## Important security rule
+## Security first
 
-**Never put your real Gemini API key in `public/app.js`, `public/index.html`, an APK, or a public GitHub repository.** Do not send the key to anyone. Add it only as a private environment variable on your backend host.
+- Never commit `.env`, real API keys, Supabase secret keys, or the Buddy access token.
+- Set secrets as private environment variables in your hosting provider's dashboard.
+- The browser stores the Buddy access token in `localStorage`. This is acceptable only for private testing on a device you control; it is not suitable for distributing a public APK or offering a public multi-user service.
+- Keep this repository private. Making it public exposes the source code to everyone.
+- Do not use real sensitive personal information when testing.
 
 ## Requirements
 
 - Node.js 18 or newer
 - A Gemini API key from Google AI Studio
-- A Node.js hosting service to run this backend
+- A hosting provider that can run a persistent Node.js web service
+- Supabase project and a `memories` table if persistent conversation and extracted-fact memory is wanted
 
-Gemini free-tier availability, model access, quotas, and terms can change. Check Google AI Studio for your account's current limits. Avoid sending sensitive/private information to a free-tier service.
+## Environment variables
+
+Configure these in your hosting provider's private environment-variable settings:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | Yes | Gemini API key |
+| `GEMINI_MODEL` | No | Gemini model name; defaults to `gemini-3.8-flash` in the current server code |
+| `BUDDY_ACCESS_TOKEN` | Yes | Private app access token; must contain at least 32 bytes |
+| `SUPABASE_URL` | No | Supabase project URL; enables persistent memory when used with the secret key |
+| `SUPABASE_SECRET_KEY` | No | Supabase secret key; keep it server-side only |
+| `PORT` | No | Hosting port; defaults to `3000` |
+
+If Supabase is not configured, the chat server can run without persistent memory. Configure both `SUPABASE_URL` and `SUPABASE_SECRET_KEY` to enable the database features.
+
+`.env.example` is a placeholder template. Copy it to `.env` for local development and replace the placeholders locally. Never commit the real `.env` file.
 
 ## Run locally
 
-1. Install Node.js 18+.
-2. Download and extract this project.
-3. In this folder, install dependencies:
+1. Install Node.js 18 or newer.
+2. Download the project.
+3. Install dependencies:
 
    ```bash
    npm install
    ```
 
-4. Copy `.env.example` to a file named `.env`.
-5. Open `.env` and replace the placeholder with your Gemini key:
-
-   ```env
-   GEMINI_API_KEY=your_real_key_here
-   GEMINI_MODEL=gemini-2.5-flash
-   PORT=3000
-   ```
-
-6. Start the server:
+4. Copy `.env.example` to `.env` and fill in your real values locally.
+5. Start the server:
 
    ```bash
    npm start
    ```
 
-7. Open `http://localhost:3000`.
-
-Do not upload `.env` to GitHub. `.gitignore` excludes it.
+6. Open `http://localhost:3000`.
 
 ## Deploy
 
-Deploy this repository to a Node.js hosting provider that supports environment variables and persistent web services.
+For a Node.js web service:
 
 - Build/install command: `npm install`
 - Start command: `npm start`
-- Add environment variable `GEMINI_API_KEY` with your real key in the host's dashboard.
-- Optional: add `GEMINI_MODEL` with a model available to your Google AI Studio account.
-- After deployment, open the service URL. The `/api/health` endpoint should return a small JSON health response.
+- Add the environment variables listed above in the host dashboard.
+- Do not upload or paste secret values into GitHub files.
+- After deployment, check `/api/health`. It reports whether Gemini, database, and access protection are configured; it does not reveal secret values.
 
-Free hosting plans may sleep, have usage limits, or change their terms. Check the host's current plan details.
+The API is rate-limited. Gemini quotas and model availability depend on the Google AI Studio account and can change.
 
-## Connect an existing Buddy app
+## Chat API
 
-The frontend in this project sends chat requests to the relative endpoint `POST /api/chat`. If your Android app already has its own chat interface, point its backend request to your deployed service's full URL plus `/api/chat`, and send JSON:
+The frontend sends a JSON request to `POST /api/chat` with a Bearer access token:
 
 ```json
 {
@@ -69,10 +79,20 @@ The frontend in this project sends chat requests to the relative endpoint `POST 
 }
 ```
 
-The response is:
+The successful response is a Server-Sent Events (SSE) stream, not a single JSON reply. Text arrives in events shaped like:
 
-```json
-{ "reply": "Hello! How can I help?" }
+```text
+data: {"text":"Hello"}
+
+data: {"text":"! How can I help?"}
+
+data: [DONE]
 ```
 
-The Android app must call your deployed HTTPS backend. Do not embed the Gemini key in the Android app. If your current APK was built from a different starter project, you may need to update its API endpoint and rebuild the APK.
+An error event may contain a JSON `error` field. The frontend reads the stream progressively and builds Buddy's reply.
+
+## Existing Android app
+
+The Android app should call your deployed HTTPS backend at `/api/chat` and send the Buddy access token in the `Authorization: Bearer ...` header. Never embed the Gemini API key or Supabase secret key in an APK.
+
+For a public app or multiple users, replace the current shared-token/localStorage approach with proper user authentication and server-side per-user data isolation before distributing it.
