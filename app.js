@@ -122,8 +122,84 @@ function renderMemories(memories) {
     date.textContent = formatMemoryDate(memory.created_at);
     if (memory.created_at) date.dateTime = memory.created_at;
 
-    item.append(content, date);
+    const actions = document.createElement("div");
+    actions.className = "memory-actions";
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "memory-edit";
+    editButton.textContent = "Edit";
+    editButton.addEventListener("click", () => editMemory(memory));
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "memory-delete";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => deleteMemory(memory));
+
+    actions.append(editButton, deleteButton);
+    item.append(content, date, actions);
     memoriesList.appendChild(item);
+  }
+}
+
+async function memoryRequest(url, options = {}) {
+  const token = getAccessToken();
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      ...(options.headers || {})
+    }
+  });
+
+  if (response.status === 401) {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    throw new Error("Your access token is invalid. Please reopen Buddy and enter it again.");
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || `Memory action failed (${response.status}).`);
+  }
+  return data;
+}
+
+async function editMemory(memory) {
+  const updatedContent = window.prompt("Correct this saved memory:", memory.content);
+  if (updatedContent === null) return;
+  if (!updatedContent.trim()) {
+    window.alert("Memory cannot be empty.");
+    return;
+  }
+  if (updatedContent.trim() === memory.content) return;
+
+  memoriesStatus.textContent = "Updating memory...";
+  try {
+    await memoryRequest(`/api/memories/${encodeURIComponent(memory.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: updatedContent.trim() })
+    });
+    await loadMemories();
+    memoriesStatus.textContent = "Memory updated successfully.";
+  } catch (error) {
+    memoriesStatus.textContent = error.message || "Could not update memory.";
+  }
+}
+
+async function deleteMemory(memory) {
+  if (!window.confirm("Delete only this saved personal memory? This cannot be undone.")) return;
+
+  memoriesStatus.textContent = "Deleting memory...";
+  try {
+    await memoryRequest(`/api/memories/${encodeURIComponent(memory.id)}`, {
+      method: "DELETE"
+    });
+    await loadMemories();
+    memoriesStatus.textContent = "Memory deleted.";
+  } catch (error) {
+    memoriesStatus.textContent = error.message || "Could not delete memory.";
   }
 }
 
