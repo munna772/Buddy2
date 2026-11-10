@@ -696,3 +696,16 @@ form.addEventListener("submit", async (event) => {
     input.focus();
   }
 });
+
+
+// =====================================
+// INSTALLABLE ANDROID / PWA SUPPORT
+// =====================================
+
+if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(error => {
+      console.warn('Buddy offline app shell could not be registered:', error);
+    });
+  });
+}
