@@ -381,6 +381,101 @@ app.get('/api/memories', requireAccess, async (_req, res) => {
 });
 
 // =====================================
+// EDIT AND DELETE INDIVIDUAL PERSONAL MEMORIES
+// =====================================
+
+app.patch('/api/memories/:id', requireAccess, async (req, res) => {
+  if (!DATABASE_CONFIGURED) {
+    return res.status(503).json({ error: 'Buddy memory storage is not configured.' });
+  }
+
+  const id = String(req.params.id || '').trim();
+  const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
+
+  if (!id || id.length > 128) {
+    return res.status(400).json({ error: 'Invalid memory ID.' });
+  }
+  if (!content || content.length > 1000 || /^FACT:/i.test(content)) {
+    return res.status(400).json({ error: 'Memory text must be between 1 and 1000 characters.' });
+  }
+
+  try {
+    const url = new URL(`${SUPABASE_URL}/rest/v1/memories`);
+    url.searchParams.set('id', `eq.${id}`);
+    url.searchParams.set('content', 'like.FACT:%');
+
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: supabaseHeaders({
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      }),
+      body: JSON.stringify({ content: `FACT: ${content}` }),
+      signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Supabase memory update failed (${response.status}): ${detail.slice(0, 400)}`);
+    }
+
+    const rows = await response.json();
+    if (!Array.isArray(rows) || rows.length !== 1) {
+      return res.status(404).json({ error: 'That personal memory was not found.' });
+    }
+
+    return res.json({
+      memory: {
+        id: rows[0].id,
+        content: String(rows[0].content || '').replace(/^FACT:\\s*/i, ''),
+        created_at: rows[0].created_at || null
+      }
+    });
+  } catch (error) {
+    console.error('Memory update failed:', error.message);
+    return res.status(502).json({ error: 'Buddy could not update that memory. Please try again.' });
+  }
+});
+
+app.delete('/api/memories/:id', requireAccess, async (req, res) => {
+  if (!DATABASE_CONFIGURED) {
+    return res.status(503).json({ error: 'Buddy memory storage is not configured.' });
+  }
+
+  const id = String(req.params.id || '').trim();
+  if (!id || id.length > 128) {
+    return res.status(400).json({ error: 'Invalid memory ID.' });
+  }
+
+  try {
+    const url = new URL(`${SUPABASE_URL}/rest/v1/memories`);
+    url.searchParams.set('id', `eq.${id}`);
+    url.searchParams.set('content', 'like.FACT:%');
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: supabaseHeaders({ Prefer: 'return=representation' }),
+      signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Supabase memory deletion failed (${response.status}): ${detail.slice(0, 400)}`);
+    }
+
+    const rows = await response.json();
+    if (!Array.isArray(rows) || rows.length !== 1) {
+      return res.status(404).json({ error: 'That personal memory was not found.' });
+    }
+
+    return res.json({ deleted: true, id: rows[0].id });
+  } catch (error) {
+    console.error('Memory deletion failed:', error.message);
+    return res.status(502).json({ error: 'Buddy could not delete that memory. Please try again.' });
+  }
+});
+
+// =====================================
 // CONVERSATION HISTORY NORMALIZATION
 // =====================================
 
