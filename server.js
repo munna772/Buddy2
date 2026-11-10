@@ -72,9 +72,12 @@ async function fetchGeminiWithFallback(url, options = {}) {
       throw error;
     }
 
+    // A 429 from the primary project can use the backup project's
+    // separate quota. If the backup is also limited, its 429 is returned.
     const fallbackEligible =
       response.status === 401 ||
       response.status === 403 ||
+      response.status === 429 ||
       response.status >= 500;
 
     if (fallbackEligible && index < GEMINI_API_KEYS.length - 1) {
