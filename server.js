@@ -537,6 +537,62 @@ app.delete('/api/memories/:id', requireAccess, async (req, res) => {
 });
 
 // =====================================
+// READ-ONLY RECENT CONVERSATION HISTORY
+// =====================================
+
+app.get('/api/history', requireAccess, async (_req, res) => {
+  if (!DATABASE_CONFIGURED) {
+    return res.status(503).json({
+      error: 'Buddy conversation storage is not configured.'
+    });
+  }
+
+  try {
+    const historyUrl = new URL(`${SUPABASE_URL}/rest/v1/memories`);
+    historyUrl.searchParams.set('select', 'id,content,created_at');
+    historyUrl.searchParams.set('content', 'not.like.FACT:%');
+    historyUrl.searchParams.set('order', 'created_at.desc');
+    historyUrl.searchParams.set('limit', '50');
+
+    const response = await fetch(historyUrl, {
+      method: 'GET',
+      headers: supabaseHeaders(),
+      signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Supabase conversation history failed (${response.status}): ${detail.slice(0, 400)}`);
+    }
+
+    const rows = await response.json();
+    if (!Array.isArray(rows)) {
+      throw new Error('Supabase returned an invalid conversation history.');
+    }
+
+    const conversations = rows
+      .filter(row =>
+        row &&
+        typeof row.id === 'string' &&
+        typeof row.content === 'string' &&
+        row.content.startsWith('User: ')
+      )
+      .map(row => ({
+        id: row.id,
+        content: row.content,
+        created_at: row.created_at || null
+      }));
+
+    return res.json({ conversations });
+  } catch (error) {
+    console.error('Conversation history loading failed:', error.message);
+    return res.status(502).json({
+      error: 'Buddy could not load previous conversations. Please try again.'
+    });
+  }
+});
+
+// =====================================
 // CONVERSATION HISTORY NORMALIZATION
 // =====================================
 
