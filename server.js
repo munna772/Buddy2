@@ -188,6 +188,23 @@ app.get('/style.css', (_req, res) => {
   res.sendFile(path.join(__dirname, 'style.css'));
 });
 
+app.get('/manifest.webmanifest', (_req, res) => {
+  res.type('application/manifest+json');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'manifest.webmanifest'));
+});
+
+app.get('/sw.js', (_req, res) => {
+  res.type('application/javascript');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'sw.js'));
+});
+
+app.get('/buddy-icon.svg', (_req, res) => {
+  res.type('image/svg+xml');
+  res.sendFile(path.join(__dirname, 'buddy-icon.svg'));
+});
+
 // =====================================
 // HEALTH CHECK
 // =====================================
