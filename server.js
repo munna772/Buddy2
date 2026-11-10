@@ -185,7 +185,6 @@ async function getMemories() {
         signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
       })
     ]);
-
     if (!factsResponse.ok) {
       const detail = await factsResponse.text().catch(() => '');
       throw new Error(
@@ -381,26 +380,30 @@ function normalizeHistory(rawHistory) {
   }
 
   return limited;
-}
-
+                                      }
 // =====================================
 // PERSONAL MEMORY TRIGGER
 // =====================================
 
-function shouldAnalyzeForMemory(message) {
+function shouldAnalyzeForMemory(message, recentUserMessages = []) {
+  const context = [
+    message,
+    ...recentUserMessages.filter(item => typeof item === 'string')
+  ].join('\n');
+
   const englishPattern =
-    /\b(my|mine|myself|i feel|i felt|i am|i'm|i love|i hate|i miss|i fear|i'm afraid|i worry|i worried|i want|i dream|my family|my parents|my mother|my father|my brother|my sister|my friend|my goal|my favourite|my favorite|my name|my age|i live|i come from|i used to|i achieved|i failed|i lost|i remember|i prefer|i hope|i regret|i'm happy|i'm sad|i'm lonely|i'm scared|i am happy|i am sad|i am lonely|i am scared|hurt|heartbroken|lonely|grateful|proud|ashamed|anxious)\b/i;
+    /\b(my|mine|myself|i feel|i felt|i am|i'm|i love|i hate|i miss|i fear|i'm afraid|i worry|i worried|i want|i dream|my family|my parents|my mother|my father|my brother|my sister|my friend|my goal|my favourite|my favorite|my name|my age|i live|i come from|i used to|i achieved|i failed|i lost|i remember|i prefer|i hope|i regret|i'm happy|i'm sad|i'm lonely|i'm scared|i am happy|i am sad|i am lonely|i am scared|hurt|heartbroken|lonely|grateful|proud|ashamed|anxious|painful|worried|afraid|upset|disappointed|miss|love|fear|struggle)\b/i;
 
   const banglaPattern =
-    /(আমি|আমার|আমাকে|আমরা|আমাদের|অনুভব|অনুভূতি|ভালোবাসি|মিস করি|ভয়|ভয়|কষ্ট|দুঃখ|খুশি|স্বপ্ন|লক্ষ্য|পরিবার|বাবা|মা|ভাই|বোন|চাই|আশা|মনে পড়ে|মনে পড়ে|একাকী|একা|গর্বিত|চিন্তা)/;
+    /(আমি|আমার|আমাকে|আমরা|আমাদের|অনুভব|অনুভূতি|ভালোবাসি|মিস করি|ভয়|ভয়|কষ্ট|দুঃখ|খুশি|স্বপ্ন|লক্ষ্য|পরিবার|বাবা|মা|ভাই|বোন|চাই|আশা|মনে পড়ে|মনে পড়ে|একাকী|একা|গর্বিত|চিন্তা|কষ্ট লাগে|মন খারাপ)/;
 
   const arabicPattern =
     /(أنا|عائلتي|أبي|أمي|أحب|أخاف|أشعر|هدفي|حلمي|أفضل|أفتقد|حزين|سعيد|أريد|أتمنى|قلق|وحيد)/;
 
   return (
-    englishPattern.test(message) ||
-    banglaPattern.test(message) ||
-    arabicPattern.test(message)
+    englishPattern.test(context) ||
+    banglaPattern.test(context) ||
+    arabicPattern.test(context)
   );
 }
 
@@ -415,7 +418,8 @@ function normalizeMemoryText(value) {
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .replace(/\s+/g, ' ');
-      }
+}
+
 // =====================================
 // AI PERSONAL MEMORY EXTRACTION
 // =====================================
@@ -586,7 +590,6 @@ OUTPUT:
     return [];
   }
 }
-
 // =====================================
 // BUDDY PERSONALITY
 // =====================================
@@ -630,6 +633,7 @@ ACCURACY:
 
 Your goal is to be a reliable, intelligent, and genuinely helpful personal AI companion.
 `;
+
 // =====================================
 // SERVER-SENT EVENTS HELPERS
 // =====================================
@@ -766,8 +770,7 @@ async function readGeminiStream(stream, onText) {
     if (field === 'data') {
       dataLines.push(value);
     }
-  }
-
+        }
   try {
     while (true) {
       const { value, done } = await reader.read();
@@ -824,6 +827,7 @@ async function readGeminiStream(stream, onText) {
     }
   }
 }
+
 // =====================================
 // CHAT ENDPOINT
 // =====================================
@@ -1012,8 +1016,7 @@ app.post('/api/chat', requireAccess, async (req, res) => {
 
     if (clientDisconnected) {
       return;
-    }
-
+                               }
     if (!reply.trim()) {
       await sendSSE(res, {
         error: 'Buddy could not generate a response. Please try again.'
@@ -1036,13 +1039,19 @@ app.post('/api/chat', requireAccess, async (req, res) => {
       return;
     }
 
-    if (DATABASE_CONFIGURED && shouldAnalyzeForMemory(message)) {
-      const recentUserMessages = history
-        .filter(item => item.role === 'user')
-        .slice(-4)
-        .map(item => item.parts?.[0]?.text || '')
-        .filter(Boolean);
+    // Collect recent user messages before checking the memory trigger.
+    // This lets the trigger detect personal or emotional context spread
+    // across the latest message and the previous four user messages.
+    const recentUserMessages = history
+      .filter(item => item.role === 'user')
+      .slice(-4)
+      .map(item => item.parts?.[0]?.text || '')
+      .filter(Boolean);
 
+    if (
+      DATABASE_CONFIGURED &&
+      shouldAnalyzeForMemory(message, recentUserMessages)
+    ) {
       const extractedFacts = await extractImportantMemories(
         message,
         recentUserMessages,
