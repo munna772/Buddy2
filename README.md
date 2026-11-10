@@ -91,8 +91,8 @@ data: [DONE]
 
 An error event may contain a JSON `error` field. The frontend reads the stream progressively and builds Buddy's reply.
 
-## Existing Android app
+## Install Buddy on Android
 
-The Android app should call your deployed HTTPS backend at `/api/chat` and send the Buddy access token in the `Authorization: Bearer ...` header. Never embed the Gemini API key or Supabase secret key in an APK.
+Buddy is provided as an installable Progressive Web App (PWA). On Android, open the HTTPS site in Chrome, open the browser menu, and choose **Install app** or **Add to Home screen**. The installed app opens in a standalone window. The service worker caches only the public app shell; `/api/` responses, chat, and personal memories are never cached for offline use.
 
-For a public app or multiple users, replace the current shared-token/localStorage approach with proper user authentication and server-side per-user data isolation before distributing it.
+This is an installable web app, not a signed native APK. A native APK requires a separate Android wrapper build and signing process. Do not distribute the current shared access-token setup as a public or multi-user app. The browser stores the Buddy access token in localStorage, so install it only on a device you control. Never embed the Gemini API key or Supabase secret key in an APK.
