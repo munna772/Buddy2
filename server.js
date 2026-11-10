@@ -44,6 +44,7 @@ async function fetchGeminiWithFallback(url, options = {}) {
   let lastError;
 
   for (let index = 0; index < GEMINI_API_KEYS.length; index += 1) {
+    const keyLabel = index === 0 ? 'primary' : 'backup';
     const headers = {
       ...(options.headers || {}),
       'x-goog-api-key': GEMINI_API_KEYS[index]
@@ -68,11 +69,15 @@ async function fetchGeminiWithFallback(url, options = {}) {
         continue;
       }
 
+      console.error(`Gemini ${keyLabel} key request failed before receiving an HTTP response: ${error.message}`);
       throw error;
     }
 
-    // A 429 from the primary project can use the backup project's
-    // separate quota. If the backup is also limited, its 429 is returned.
+    if (response.ok) {
+      console.info(`Gemini ${keyLabel} key request succeeded (HTTP ${response.status}).`);
+      return response;
+    }
+
     const fallbackEligible =
       response.status === 401 ||
       response.status === 403 ||
@@ -81,11 +86,12 @@ async function fetchGeminiWithFallback(url, options = {}) {
 
     if (fallbackEligible && index < GEMINI_API_KEYS.length - 1) {
       console.warn(
-        `Gemini key ${index + 1} returned HTTP ${response.status}; trying the configured backup key.`
+        `Gemini primary key returned HTTP ${response.status}; trying the configured backup key.`
       );
       continue;
     }
 
+    console.error(`Gemini ${keyLabel} key request failed with HTTP ${response.status}.`);
     return response;
   }
 
