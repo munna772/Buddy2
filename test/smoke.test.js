@@ -65,6 +65,16 @@ test('serves the app shell with baseline security headers', async () => {
   assert.match(await response.text(), /Buddy AI/);
 });
 
+test('serves the bundled voice-enabled client and voice controls', async () => {
+  const response = await fetch(`${baseUrl}/app.bundle.js`);
+  assert.equal(response.status, 200);
+  const script = await response.text();
+  assert.match(script, /Voice replies/);
+  const shell = await (await fetch(baseUrl)).text();
+  assert.match(shell, /id="voice-input"/);
+  assert.match(shell, /id="voice-language"/);
+});
+
 test('health endpoint reports configuration without revealing secrets and disables caching', async () => {
   const response = await fetch(`${baseUrl}/api/health`);
   const data = await response.json();
