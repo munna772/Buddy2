@@ -15,6 +15,8 @@ const app = express();
 
 const PORT = Number(process.env.PORT) || 3000;
 const API_KEY = (process.env.GEMINI_API_KEY || '').trim();
+const BACKUP_API_KEY = (process.env.Backup_Gemini_Api_Key || '').trim();
+const GEMINI_API_KEYS = [API_KEY, BACKUP_API_KEY].filter(Boolean);
 const MODEL = (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim();
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
@@ -31,6 +33,62 @@ const MEMORY_ANALYSIS_TIMEOUT_MS = 12000;
 const DATABASE_CONFIGURED = Boolean(
   SUPABASE_URL && SUPABASE_SECRET_KEY
 );
+
+// Retry with the backup key only for authentication/permission failures,
+// server-side outages, or network failures. Never switch keys for HTTP 429
+// quota/rate-limit responses.
+async function fetchGeminiWithFallback(url, options = {}) {
+  if (GEMINI_API_KEYS.length === 0) {
+    throw new Error('No Gemini API key is configured.');
+  }
+
+  let lastError;
+
+  for (let index = 0; index < GEMINI_API_KEYS.length; index += 1) {
+    const headers = {
+      ...(options.headers || {}),
+      'x-goog-api-key': GEMINI_API_KEYS[index]
+    };
+
+    let response;
+
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers
+      });
+    } catch (error) {
+      lastError = error;
+
+      if (
+        index < GEMINI_API_KEYS.length - 1 &&
+        error.name !== 'AbortError' &&
+        error.name !== 'TimeoutError'
+      ) {
+        console.warn('Primary Gemini request had a network error; trying the configured backup key.');
+        continue;
+      }
+
+      throw error;
+    }
+
+    const fallbackEligible =
+      response.status === 401 ||
+      response.status === 403 ||
+      response.status >= 500;
+
+    if (fallbackEligible && index < GEMINI_API_KEYS.length - 1) {
+      console.warn(
+        `Gemini key ${index + 1} returned HTTP ${response.status}; trying the configured backup key.`
+      );
+      continue;
+    }
+
+    return response;
+  }
+
+  throw lastError || new Error('All configured Gemini keys failed.');
+}
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error('PORT must be a valid TCP port number.');
@@ -98,7 +156,7 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     service: 'Buddy AI',
     model: MODEL,
-    geminiConfigured: Boolean(API_KEY),
+    geminiConfigured: GEMINI_API_KEYS.length > 0,
     databaseConfigured: DATABASE_CONFIGURED,
     accessProtectionConfigured: true
   });
@@ -602,7 +660,7 @@ async function extractImportantMemories(
   recentUserMessages,
   existingFacts
 ) {
-  if (!API_KEY) {
+  if (GEMINI_API_KEYS.length === 0) {
     return [];
   }
 
@@ -656,13 +714,12 @@ OUTPUT:
   };
 
   try {
-    const response = await fetch(
+    const response = await fetchGeminiWithFallback(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`,
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': API_KEY
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           systemInstruction: {
@@ -1069,9 +1126,9 @@ app.post('/api/chat', requireAccess, async (req, res) => {
       }
     }
 
-    if (!API_KEY) {
+    if (GEMINI_API_KEYS.length === 0) {
       return res.status(500).json({
-        error: 'The memory request was checked, but Buddy is missing GEMINI_API_KEY.'
+        error: 'The memory request was checked, but Buddy has no Gemini API key configured.'
       });
     }
 
@@ -1093,13 +1150,12 @@ app.post('/api/chat', requireAccess, async (req, res) => {
       controller.abort();
     }, GEMINI_TIMEOUT_MS);
 
-    const geminiResponse = await fetch(
+    const geminiResponse = await fetchGeminiWithFallback(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:streamGenerateContent?alt=sse`,
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': API_KEY
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           systemInstruction: {
