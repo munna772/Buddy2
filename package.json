@@ -2,7 +2,7 @@
   "name": "buddy-ai-gemini",
   "version": "1.0.0",
   "private": true,
-  "description": "Buddy AI backend powered by Google's Gemini API",
+  "description": "Buddy AI backend and Android app build",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -15,6 +15,10 @@
   "dependencies": {
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "@capacitor/core": "6.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "6.2.0"
   }
 }
