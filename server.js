@@ -125,7 +125,40 @@ if (DATABASE_CONFIGURED) {
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '1mb' }));
+
+// Baseline browser security headers. Buddy serves only same-origin assets,
+// so this restrictive policy does not require external script/style sources.
+app.use((_req, res, next) => {
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "upgrade-insecure-requests"
+  ].join('; '));
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  next();
+});
+
+// API responses contain private chat and memory data; never cache them.
+app.use('/api/', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
+// A 128 KB cap comfortably covers the 4 KB message and 12-message context
+// while limiting oversized JSON payloads.
+app.use(express.json({ limit: '128kb' }));
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
