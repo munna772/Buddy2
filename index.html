@@ -9,6 +9,16 @@
 <body>
   <main class="app">
     <header><div class="logo">B</div><div><h1>Buddy AI</h1><p>Your friendly AI assistant</p></div><span class="status">● Online</span></header>
+    <div class="memory-toolbar">
+      <button id="view-memories" type="button" aria-controls="memories-panel" aria-expanded="false">View saved memories</button>
+    </div>
+    <section id="memories-panel" class="memories-panel" hidden aria-live="polite">
+      <div class="memories-heading">
+        <h2>Saved personal memories</h2>
+        <p id="memories-status">Your saved memories will appear here.</p>
+      </div>
+      <div id="memories-list" class="memories-list"></div>
+    </section>
     <section id="chat" class="chat" aria-live="polite">
       <div class="bubble buddy">Hey! I'm Buddy. What would you like to talk about?</div>
     </section>
