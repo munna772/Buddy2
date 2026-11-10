@@ -1,9 +1,9 @@
 'use strict';
 
-const CACHE_NAME = 'buddy-app-shell-v1';
+const CACHE_NAME = 'buddy-app-shell-v2';
 const APP_SHELL = [
   '/',
-  '/app.js',
+  '/app.bundle.js',
   '/style.css',
   '/manifest.webmanifest',
   '/buddy-icon.svg'
