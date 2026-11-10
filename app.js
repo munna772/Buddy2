@@ -1,3 +1,5 @@
+import { listenForSpeech, speakText, stopSpeaking } from './voice.js';
+
 
 const form = document.getElementById("chat-form");
 const input = document.getElementById("message");
@@ -15,6 +17,60 @@ const MAX_HISTORY = 12;
 const TOKEN_STORAGE_KEY = "buddy_access_token";
 
 let activeController = null;
+let voiceRepliesEnabled = false;
+let speakNextReply = false;
+
+const voiceInputButton = document.getElementById("voice-input");
+const voiceRepliesButton = document.getElementById("voice-replies");
+const stopSpeakingButton = document.getElementById("stop-speaking");
+const voiceLanguageSelect = document.getElementById("voice-language");
+const voiceStatus = document.getElementById("voice-status");
+
+function selectedVoiceLanguage() {
+  return voiceLanguageSelect?.value || "en-US";
+}
+
+if (voiceRepliesButton) {
+  voiceRepliesButton.addEventListener("click", () => {
+    voiceRepliesEnabled = !voiceRepliesEnabled;
+    voiceRepliesButton.setAttribute("aria-pressed", String(voiceRepliesEnabled));
+    voiceRepliesButton.textContent = voiceRepliesEnabled
+      ? "🔊 Voice replies: On"
+      : "🔊 Voice replies: Off";
+    if (!voiceRepliesEnabled) stopSpeaking();
+    if (voiceStatus) voiceStatus.textContent = voiceRepliesEnabled
+      ? "Buddy will speak its replies."
+      : "Spoken replies are off.";
+  });
+}
+
+if (stopSpeakingButton) {
+  stopSpeakingButton.addEventListener("click", () => {
+    stopSpeaking();
+    if (voiceStatus) voiceStatus.textContent = "Buddy stopped speaking.";
+  });
+}
+
+if (voiceInputButton) {
+  voiceInputButton.addEventListener("click", async () => {
+    if (activeController) return;
+    voiceInputButton.disabled = true;
+    voiceInputButton.textContent = "Listening...";
+    if (voiceStatus) voiceStatus.textContent = "Speak now. Buddy is listening.";
+    try {
+      const transcript = await listenForSpeech(selectedVoiceLanguage());
+      input.value = transcript;
+      speakNextReply = true;
+      if (voiceStatus) voiceStatus.textContent = "You said: " + transcript;
+      form.requestSubmit();
+    } catch (error) {
+      if (voiceStatus) voiceStatus.textContent = error.message || "Voice input failed.";
+    } finally {
+      voiceInputButton.disabled = false;
+      voiceInputButton.textContent = "🎙️ Talk";
+    }
+  });
+}
 
 // =====================================
 // STOP GENERATION BUTTON
@@ -32,6 +88,7 @@ stopButton.title = "Stop generating response";
 send.insertAdjacentElement("afterend", stopButton);
 
 stopButton.addEventListener("click", () => {
+  stopSpeaking();
   if (activeController && !activeController.signal.aborted) {
     stopButton.disabled = true;
     stopButton.textContent = "Stopping...";
@@ -592,7 +649,8 @@ form.addEventListener("submit", async (event) => {
 
       body: JSON.stringify({
         message,
-        history: history.slice(-MAX_HISTORY)
+        history: history.slice(-MAX_HISTORY),
+        voiceMode: voiceRepliesEnabled || speakNextReply
       }),
 
       signal: controller.signal
@@ -654,6 +712,16 @@ form.addEventListener("submit", async (event) => {
       );
     }
 
+    if (voiceRepliesEnabled || speakNextReply) {
+      try {
+        speakText(reply, selectedVoiceLanguage());
+        if (voiceStatus) voiceStatus.textContent = "Buddy is speaking.";
+      } catch (error) {
+        if (voiceStatus) voiceStatus.textContent = error.message || "Spoken replies are unavailable.";
+      }
+    }
+    speakNextReply = false;
+
   } catch (error) {
     // Handle intentional stopping
     if (controller.signal.aborted) {
@@ -685,6 +753,7 @@ form.addEventListener("submit", async (event) => {
 
   } finally {
     activeController = null;
+    speakNextReply = false;
 
     send.disabled = false;
     send.textContent = "Send";
