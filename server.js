@@ -1139,7 +1139,8 @@ app.post('/api/chat', requireAccess, async (req, res) => {
 
     clientDisconnected = true;
 
-    if (controller) {
+    if (controller && !controller.signal.aborted) {
+      console.info('Chat client disconnected; cancelling the upstream Gemini request.');
       controller.abort();
     }
   };
@@ -1332,7 +1333,10 @@ app.post('/api/chat', requireAccess, async (req, res) => {
 
     if (clientDisconnected) {
       return;
-                               }
+    }
+
+    console.info(`Gemini response stream completed successfully (${reply.length} characters).`);
+
     if (!reply.trim()) {
       await sendSSE(res, {
         error: 'Buddy could not generate a response. Please try again.'
