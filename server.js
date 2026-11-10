@@ -34,9 +34,8 @@ const DATABASE_CONFIGURED = Boolean(
   SUPABASE_URL && SUPABASE_SECRET_KEY
 );
 
-// Retry with the backup key only for authentication/permission failures,
-// server-side outages, or network failures. Never switch keys for HTTP 429
-// quota/rate-limit responses.
+// Retry with the backup key for authentication/permission failures,
+// quota/rate-limit responses, server-side outages, or network failures.
 async function fetchGeminiWithFallback(url, options = {}) {
   if (GEMINI_API_KEYS.length === 0) {
     throw new Error('No Gemini API key is configured.');
