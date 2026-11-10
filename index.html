@@ -29,12 +29,24 @@
     <section id="chat" class="chat" aria-live="polite">
       <div class="bubble buddy">Hey! I'm Buddy. What would you like to talk about?</div>
     </section>
+    <div class="voice-controls" aria-label="Voice assistant controls">
+      <label class="voice-language-label" for="voice-language">Voice language</label>
+      <select id="voice-language" aria-label="Voice language">
+        <option value="en-US">English</option>
+        <option value="bn-BD">বাংলা</option>
+        <option value="ar-SA">العربية</option>
+      </select>
+      <button id="voice-input" type="button" aria-label="Speak to Buddy">🎙️ Talk</button>
+      <button id="voice-replies" type="button" aria-pressed="false">🔊 Voice replies: Off</button>
+      <button id="stop-speaking" type="button">Stop voice</button>
+      <span id="voice-status" role="status" aria-live="polite"></span>
+    </div>
     <form id="chat-form">
       <input id="message" autocomplete="off" placeholder="Message Buddy..." aria-label="Message Buddy" required>
       <button id="send" type="submit">Send</button>
     </form>
     <p class="note">Buddy AI responses are powered by Google Gemini.</p>
   </main>
-  <script src="/app.js"></script>
+  <script src="/app.bundle.js"></script>
 </body>
 </html>
