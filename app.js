@@ -518,6 +518,24 @@ async function readStream(response, bubble) {
 }
 
 // =====================================
+// FRIENDLY CHAT ERROR MESSAGES
+// =====================================
+
+function getFriendlyChatError(error) {
+  const message = String(error?.message || "");
+
+  if (/failed to fetch|networkerror|load failed|internet/i.test(message)) {
+    return "Couldn't connect to Buddy. Check your internet connection and try again.";
+  }
+
+  if (/timed out|timeout|took too long/i.test(message)) {
+    return "Buddy took too long to respond. Please try again.";
+  }
+
+  return message || "Buddy couldn't complete your request. Please try again.";
+}
+
+// =====================================
 // SEND MESSAGE
 // =====================================
 
@@ -652,11 +670,12 @@ form.addEventListener("submit", async (event) => {
     userBubble.remove();
 
     const partial = waiting.textContent;
+    const friendlyError = getFriendlyChatError(error);
 
     waiting.textContent =
       partial === "Buddy is thinking..."
-        ? `Sorry, I couldn't reply: ${error.message}`
-        : `${partial}\n\nResponse interrupted: ${error.message}`;
+        ? `Sorry, I couldn't reply: ${friendlyError}`
+        : `${partial}\n\nResponse interrupted: ${friendlyError}`;
 
     console.error("Buddy error:", error);
 
