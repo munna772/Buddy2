@@ -16,7 +16,8 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "dotenv": "^16.4.7",
-    "@capacitor/core": "6.2.0"
+    "@capacitor/core": "6.2.0",
+    "@capacitor/android": "6.2.0"
   },
   "devDependencies": {
     "@capacitor/cli": "6.2.0"
