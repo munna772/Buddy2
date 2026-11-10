@@ -26,11 +26,15 @@ stopButton.type = "button";
 stopButton.className = send.className;
 stopButton.textContent = "Stop";
 stopButton.hidden = true;
+stopButton.setAttribute("aria-label", "Stop generating response");
+stopButton.title = "Stop generating response";
 
 send.insertAdjacentElement("afterend", stopButton);
 
 stopButton.addEventListener("click", () => {
-  if (activeController) {
+  if (activeController && !activeController.signal.aborted) {
+    stopButton.disabled = true;
+    stopButton.textContent = "Stopping...";
     activeController.abort();
   }
 });
@@ -687,6 +691,7 @@ form.addEventListener("submit", async (event) => {
 
     stopButton.hidden = true;
     stopButton.disabled = false;
+    stopButton.textContent = "Stop";
 
     input.focus();
   }
