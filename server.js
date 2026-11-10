@@ -543,14 +543,14 @@ function normalizeHistory(rawHistory) {
 // the requested fact when Gemini memory extraction is rate-limited.
 function extractExplicitMemory(message) {
   const match = String(message || '').match(
-    /^\\s*(?:please\\s+)?remember(?:\\s+this|\\s+that)?\\s*[:,—-]?\\s+([\\s\\S]+?)\\s*$/i
+    /^\s*(?:please\s+)?remember(?:\s+this|\s+that)?\s*[:,—-]?\s+([\s\S]+?)\s*$/i
   );
 
   if (!match) {
     return null;
   }
 
-  const fact = match[1].replace(/\\s+/g, ' ').trim();
+  const fact = match[1].replace(/\s+/g, ' ').trim();
 
   if (!fact || fact.length > 400) {
     return null;
@@ -558,7 +558,6 @@ function extractExplicitMemory(message) {
 
   return fact;
 }
-
 function shouldAnalyzeForMemory(message, recentUserMessages = []) {
   const context = [
     message,
