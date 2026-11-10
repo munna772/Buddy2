@@ -27,3 +27,9 @@ button:disabled { opacity: .6; }
 .memory-item { padding: 10px 12px; border: 1px solid #2b3a50; border-radius: 10px; background: #1b2a40; }
 .memory-content { margin: 0 0 7px; line-height: 1.45; overflow-wrap: anywhere; }
 .memory-date { color: #9eacc0; font-size: 11px; }
+
+
+.memory-actions { display: flex; gap: 8px; margin-top: 10px; }
+.memory-actions button { min-height: 34px; padding: 7px 12px; font-size: 12px; cursor: pointer; }
+.memory-actions .memory-edit { background: #5577f5; }
+.memory-actions .memory-delete { background: #9f3d4b; }
