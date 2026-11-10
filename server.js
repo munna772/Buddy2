@@ -322,6 +322,64 @@ async function saveExtractedFactsToSupabase(facts) {
   return true;
 }
 
+
+// =====================================
+// READ-ONLY PERSONAL MEMORY API
+// =====================================
+
+app.get('/api/memories', requireAccess, async (_req, res) => {
+  if (!DATABASE_CONFIGURED) {
+    return res.status(503).json({
+      error: 'Buddy memory storage is not configured.'
+    });
+  }
+
+  try {
+    const memoriesUrl = new URL(`${SUPABASE_URL}/rest/v1/memories`);
+    memoriesUrl.searchParams.set('select', 'id,content,created_at');
+    memoriesUrl.searchParams.set('content', 'like.FACT:%');
+    memoriesUrl.searchParams.set('order', 'created_at.desc');
+    memoriesUrl.searchParams.set('limit', '200');
+
+    const response = await fetch(memoriesUrl, {
+      method: 'GET',
+      headers: supabaseHeaders(),
+      signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(
+        `Supabase memory listing failed (${response.status}): ${detail.slice(0, 400)}`
+      );
+    }
+
+    const rows = await response.json();
+    if (!Array.isArray(rows)) {
+      throw new Error('Supabase returned an invalid memory list.');
+    }
+
+    const memories = rows
+      .filter(row =>
+        row &&
+        typeof row.id === 'string' &&
+        typeof row.content === 'string'
+      )
+      .map(row => ({
+        id: row.id,
+        content: row.content.replace(/^FACT:\\s*/i, ''),
+        created_at: row.created_at || null
+      }));
+
+    return res.json({ memories });
+  } catch (error) {
+    console.error('Memory listing failed:', error.message);
+    return res.status(502).json({
+      error: 'Buddy could not load saved memories. Please try again.'
+    });
+  }
+});
+
 // =====================================
 // CONVERSATION HISTORY NORMALIZATION
 // =====================================
