@@ -34,3 +34,80 @@ button:disabled { opacity: .6; }
 .memory-actions button { min-height: 34px; padding: 7px 12px; font-size: 12px; cursor: pointer; }
 .memory-actions .memory-edit { background: #5577f5; }
 .memory-actions .memory-delete { background: #9f3d4b; }
+
+
+/* Mobile usability and touch-friendly controls */
+button {
+  min-height: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+input {
+  font-size: 16px;
+}
+
+.chat {
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+header,
+.memory-toolbar,
+form,
+.note {
+  flex-shrink: 0;
+}
+
+.memory-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  body {
+    padding: 0;
+    place-items: stretch;
+  }
+
+  .app {
+    width: 100%;
+    height: 100vh;
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  header {
+    padding: 12px;
+  }
+
+  .chat {
+    padding: 14px 12px;
+  }
+
+  form {
+    gap: 7px;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  form button {
+    padding: 0 14px;
+  }
+}
+
+@supports (height: 100dvh) {
+  @media (max-width: 600px) {
+    body {
+      min-height: 100dvh;
+    }
+
+    .app {
+      height: 100dvh;
+      min-height: 100dvh;
+    }
+  }
+}
