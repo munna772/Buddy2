@@ -242,6 +242,104 @@ memoriesButton.addEventListener("click", async () => {
 });
 
 // =====================================
+// RESTORE SAVED CONVERSATION HISTORY
+// =====================================
+
+const historyButton = document.getElementById("load-history");
+const historyStatus = document.getElementById("history-status");
+
+function parseSavedConversation(content) {
+  if (typeof content !== "string" || !content.startsWith("User: ")) {
+    return null;
+  }
+
+  const separator = "\n\nBuddy: ";
+  const separatorIndex = content.indexOf(separator);
+
+  if (separatorIndex < 0) return null;
+
+  const userText = content.slice(6, separatorIndex).trim();
+  const buddyText = content.slice(separatorIndex + separator.length).trim();
+
+  if (!userText || !buddyText) return null;
+
+  return { userText, buddyText };
+}
+
+async function loadConversationHistory(silent = false) {
+  if (!historyButton || !historyStatus) return;
+
+  historyButton.disabled = true;
+  if (!silent) historyStatus.textContent = "Loading previous conversations...";
+
+  try {
+    const token = getAccessToken();
+    const response = await fetch("/api/history", {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+
+    if (response.status === 401) {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      throw new Error("Your access token is invalid. Please enter it again.");
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `Could not load history (${response.status}).`);
+    }
+
+    const conversations = Array.isArray(data.conversations)
+      ? data.conversations.slice().reverse()
+      : [];
+
+    const restored = conversations
+      .map(item => parseSavedConversation(item.content))
+      .filter(Boolean);
+
+    chat.replaceChildren();
+    history.length = 0;
+
+    if (!restored.length) {
+      addBubble("Hey! I'm Buddy. What would you like to talk about?", "buddy");
+      historyStatus.textContent = "No saved conversations found yet.";
+      return;
+    }
+
+    for (const conversation of restored) {
+      addBubble(conversation.userText, "user");
+      addBubble(conversation.buddyText, "buddy");
+      history.push(
+        { role: "user", text: conversation.userText },
+        { role: "model", text: conversation.buddyText }
+      );
+    }
+
+    if (history.length > MAX_HISTORY) {
+      history.splice(0, history.length - MAX_HISTORY);
+    }
+
+    historyStatus.textContent = `Restored ${restored.length} previous conversation${restored.length === 1 ? "" : "s"}.`;
+    chat.scrollTop = chat.scrollHeight;
+  } catch (error) {
+    if (!silent) {
+      historyStatus.textContent = error.message || "Could not load previous conversations.";
+    }
+  } finally {
+    historyButton.disabled = false;
+  }
+}
+
+if (historyButton) {
+  historyButton.addEventListener("click", () => loadConversationHistory(false));
+}
+
+// Restore automatically when this browser already has Buddy's access token.
+if (localStorage.getItem(TOKEN_STORAGE_KEY)) {
+  loadConversationHistory(true);
+}
+
+// =====================================
 // READ STREAMING RESPONSE
 // =====================================
 
