@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "build": "esbuild app.js --bundle --format=iife --platform=browser --target=es2020 --outfile=app.bundle.js",
+    "postinstall": "npm run build"
   },
   "engines": {
     "node": ">=18"
@@ -17,7 +19,9 @@
     "express-rate-limit": "^7.5.0",
     "dotenv": "^16.4.7",
     "@capacitor/core": "6.2.0",
-    "@capacitor/android": "6.2.0"
+    "@capacitor/android": "6.2.0",
+    "@capacitor-community/speech-recognition": "6.0.1",
+    "esbuild": "0.24.2"
   },
   "devDependencies": {
     "@capacitor/cli": "6.2.0",
