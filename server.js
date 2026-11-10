@@ -15,7 +15,7 @@ const app = express();
 
 const PORT = Number(process.env.PORT) || 3000;
 const API_KEY = (process.env.GEMINI_API_KEY || '').trim();
-const BACKUP_API_KEY = (process.env.Backup_Gemini_Api_Key || '').trim();
+const BACKUP_API_KEY = (process.env.BACKUP_GEMINI_API_KEY || process.env.Backup_Gemini_Api_Key || '').trim();
 const GEMINI_API_KEYS = [API_KEY, BACKUP_API_KEY].filter(Boolean);
 const MODEL = (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim();
 
