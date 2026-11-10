@@ -1029,6 +1029,17 @@ app.post('/api/chat', requireAccess, async (req, res) => {
       return;
     }
 
+    // Finish the user's response before slower background memory work.
+    // This keeps the chat UI responsive while Supabase saves continue.
+    const doneWritten = await writeChunk(res, 'data: [DONE]\n\n');
+
+    if (!doneWritten || res.writableEnded || res.destroyed) {
+      clientDisconnected = true;
+      return;
+    }
+
+    res.end();
+
     try {
       await saveToSupabase(`User: ${message}\n\nBuddy: ${reply}`);
     } catch (error) {
@@ -1075,11 +1086,6 @@ app.post('/api/chat', requireAccess, async (req, res) => {
       return;
     }
 
-    const doneWritten = await writeChunk(res, 'data: [DONE]\n\n');
-
-    if (doneWritten && !res.writableEnded && !res.destroyed) {
-      res.end();
-    }
 
   } catch (error) {
     if (timeoutHandle) {
