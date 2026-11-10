@@ -73,6 +73,94 @@ function getAccessToken() {
 }
 
 // =====================================
+// VIEW SAVED PERSONAL MEMORIES
+// =====================================
+
+const memoriesButton = document.getElementById("view-memories");
+const memoriesPanel = document.getElementById("memories-panel");
+const memoriesList = document.getElementById("memories-list");
+const memoriesStatus = document.getElementById("memories-status");
+
+function formatMemoryDate(value) {
+  if (!value) return "Date unavailable";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+
+  return new Intl.DateTimeFormat("en-BD", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Dhaka"
+  }).format(date);
+}
+
+function renderMemories(memories) {
+  memoriesList.replaceChildren();
+
+  if (!memories.length) {
+    memoriesStatus.textContent = "No saved personal memories yet.";
+    return;
+  }
+
+  memoriesStatus.textContent = `${memories.length} saved personal memor${memories.length === 1 ? "y" : "ies"}`;
+
+  for (const memory of memories) {
+    const item = document.createElement("article");
+    item.className = "memory-item";
+
+    const content = document.createElement("p");
+    content.className = "memory-content";
+    content.textContent = memory.content;
+
+    const date = document.createElement("time");
+    date.className = "memory-date";
+    date.textContent = formatMemoryDate(memory.created_at);
+    if (memory.created_at) date.dateTime = memory.created_at;
+
+    item.append(content, date);
+    memoriesList.appendChild(item);
+  }
+}
+
+async function loadMemories() {
+  memoriesButton.disabled = true;
+  memoriesStatus.textContent = "Loading saved memories...";
+  memoriesList.replaceChildren();
+
+  try {
+    const token = getAccessToken();
+    const response = await fetch("/api/memories", {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+
+    if (response.status === 401) {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      throw new Error("Your access token is invalid. Please reopen Buddy and enter it again.");
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `Could not load memories (${response.status}).`);
+    }
+
+    renderMemories(Array.isArray(data.memories) ? data.memories : []);
+  } catch (error) {
+    memoriesStatus.textContent = error.message || "Could not load saved memories.";
+  } finally {
+    memoriesButton.disabled = false;
+  }
+}
+
+memoriesButton.addEventListener("click", async () => {
+  const opening = memoriesPanel.hidden;
+  memoriesPanel.hidden = !opening;
+  memoriesButton.setAttribute("aria-expanded", String(opening));
+
+  if (opening) await loadMemories();
+});
+
+// =====================================
 // READ STREAMING RESPONSE
 // =====================================
 
