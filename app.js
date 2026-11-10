@@ -84,7 +84,12 @@ const memoriesStatus = document.getElementById("memories-status");
 function formatMemoryDate(value) {
   if (!value) return "Date unavailable";
 
-  const date = new Date(value);
+  // Supabase may return a timestamp without a timezone when the column
+  // is timestamp without time zone. Buddy stores these values as UTC,
+  // so explicitly interpret timezone-less values as UTC before display.
+  const timestamp = String(value).trim().replace(" ", "T");
+  const hasTimezone = /(?:Z|[+-]\\d{2}(?::?\\d{2})?)$/i.test(timestamp);
+  const date = new Date(hasTimezone ? timestamp : `${timestamp}Z`);
   if (Number.isNaN(date.getTime())) return "Date unavailable";
 
   return new Intl.DateTimeFormat("en-BD", {
