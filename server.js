@@ -538,6 +538,27 @@ function normalizeHistory(rawHistory) {
 // PERSONAL MEMORY TRIGGER
 // =====================================
 
+// Explicit "remember this/that" requests are saved directly to Supabase.
+// This path does not require a second Gemini call, so it can still save
+// the requested fact when Gemini memory extraction is rate-limited.
+function extractExplicitMemory(message) {
+  const match = String(message || '').match(
+    /^\\s*(?:please\\s+)?remember(?:\\s+this|\\s+that)?\\s*[:,—-]?\\s+([\\s\\S]+?)\\s*$/i
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const fact = match[1].replace(/\\s+/g, ' ').trim();
+
+  if (!fact || fact.length > 400) {
+    return null;
+  }
+
+  return fact;
+}
+
 function shouldAnalyzeForMemory(message, recentUserMessages = []) {
   const context = [
     message,
@@ -1006,12 +1027,6 @@ app.post('/api/chat', requireAccess, async (req, res) => {
   res.on('close', handleDisconnect);
 
   try {
-    if (!API_KEY) {
-      return res.status(500).json({
-        error: 'The server is missing GEMINI_API_KEY.'
-      });
-    }
-
     const message =
       typeof req.body?.message === 'string'
         ? req.body.message.trim()
@@ -1031,6 +1046,35 @@ app.post('/api/chat', requireAccess, async (req, res) => {
 
     const history = normalizeHistory(req.body?.history);
     const savedMemories = await getMemories();
+
+    // Save explicit memory requests before calling Gemini. This is important:
+    // even if Gemini is over quota or unavailable, the user's direct request
+    // to remember a fact can still be written to Supabase.
+    const explicitMemory = extractExplicitMemory(message);
+
+    if (explicitMemory && DATABASE_CONFIGURED) {
+      const normalizedRequestedFact = normalizeMemoryText(explicitMemory);
+      const alreadySaved = savedMemories.existingFacts.some(
+        fact => normalizeMemoryText(fact) === normalizedRequestedFact
+      );
+
+      if (alreadySaved) {
+        console.log('Explicit memory request matched an existing saved fact.');
+      } else {
+        try {
+          await saveExtractedFactsToSupabase([explicitMemory]);
+          console.log('Saved an explicitly requested personal memory.');
+        } catch (error) {
+          console.error('Explicit personal memory saving failed:', error.message);
+        }
+      }
+    }
+
+    if (!API_KEY) {
+      return res.status(500).json({
+        error: 'The memory request was checked, but Buddy is missing GEMINI_API_KEY.'
+      });
+    }
 
     if (clientDisconnected) {
       return;
@@ -1214,6 +1258,7 @@ app.post('/api/chat', requireAccess, async (req, res) => {
 
     if (
       DATABASE_CONFIGURED &&
+      !explicitMemory &&
       shouldAnalyzeForMemory(message, recentUserMessages)
     ) {
       const extractedFacts = await extractImportantMemories(
