@@ -111,3 +111,44 @@ form,
     }
   }
 }
+
+
+/* Voice assistant controls */
+.voice-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 10px 14px;
+  border-top: 1px solid #2b3a50;
+  background: #131e2e;
+}
+.voice-controls label {
+  color: #9eacc0;
+  font-size: 12px;
+}
+.voice-controls select {
+  min-height: 40px;
+  max-width: 115px;
+  border: 1px solid #3a4b65;
+  border-radius: 10px;
+  background: #101827;
+  color: #edf2f7;
+  padding: 7px;
+}
+.voice-controls button {
+  min-height: 40px;
+  padding: 8px 11px;
+  font-size: 12px;
+}
+#voice-status {
+  flex: 1 1 100%;
+  min-width: 0;
+  color: #9eacc0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+@media (max-width: 600px) {
+  .voice-controls { padding: 8px 10px; gap: 6px; }
+  .voice-controls button { padding: 7px 9px; }
+}
