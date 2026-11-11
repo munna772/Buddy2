@@ -85,10 +85,12 @@ class BuddyWakeWordService : Service() {
                 keywordsScore = 1.5f,
                 keywordsThreshold = 0.35f
             )
-            localSpotter = KeywordSpotter(assetManager = assets, config = config)
-            spotter = localSpotter
-            localStream = localSpotter.createStream()
-            stream = localStream
+            val createdSpotter = KeywordSpotter(assetManager = assets, config = config)
+            localSpotter = createdSpotter
+            spotter = createdSpotter
+            val createdStream = createdSpotter.createStream()
+            localStream = createdStream
+            stream = createdStream
 
             val minBuffer = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
@@ -97,31 +99,32 @@ class BuddyWakeWordService : Service() {
             )
             if (minBuffer <= 0) throw IllegalStateException("This device could not create a 16 kHz microphone buffer.")
 
-            localRecorder = AudioRecord(
+            val createdRecorder = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
                 maxOf(minBuffer * 2, SAMPLE_RATE * 2)
             )
-            if (localRecorder.state != AudioRecord.STATE_INITIALIZED) {
+            localRecorder = createdRecorder
+            if (createdRecorder.state != AudioRecord.STATE_INITIALIZED) {
                 throw IllegalStateException("Android could not initialize the microphone.")
             }
-            recorder = localRecorder
-            localRecorder.startRecording()
+            recorder = createdRecorder
+            createdRecorder.startRecording()
 
             val pcm = ShortArray(1600)
             while (running) {
-                val count = localRecorder.read(pcm, 0, pcm.size)
+                val count = createdRecorder.read(pcm, 0, pcm.size)
                 if (count <= 0) continue
                 val samples = FloatArray(count) { index -> pcm[index] / 32768.0f }
-                localStream.acceptWaveform(samples, sampleRate = SAMPLE_RATE)
+                createdStream.acceptWaveform(samples, sampleRate = SAMPLE_RATE)
 
-                while (running && localSpotter.isReady(localStream)) {
-                    localSpotter.decode(localStream)
-                    val detected = localSpotter.getResult(localStream).keyword
+                while (running && createdSpotter.isReady(createdStream)) {
+                    createdSpotter.decode(createdStream)
+                    val detected = createdSpotter.getResult(createdStream).keyword
                     if (detected.isNotBlank()) {
-                        localSpotter.reset(localStream)
+                        createdSpotter.reset(createdStream)
                         Log.i(TAG, "Keyword candidate detected: $detected")
                         if (detected.equals("HEY_BUDDY", ignoreCase = true) ||
                             detected.equals("HEY BUDDY", ignoreCase = true)) {
