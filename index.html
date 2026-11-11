@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101827">
+  <meta name="theme-color" content="#090b10">
   <meta name="description" content="Buddy AI — your private personal AI assistant.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/buddy-icon.svg" type="image/svg+xml">
@@ -13,39 +13,64 @@
 </head>
 <body>
   <main class="app">
-    <header><div class="logo">B</div><div><h1>Buddy AI</h1><p>Your friendly AI assistant</p></div><span class="status">● Online</span></header>
-    <div class="memory-toolbar">
-      <button id="view-memories" type="button" aria-controls="memories-panel" aria-expanded="false">View saved memories</button>
-      <button id="load-history" type="button">Load previous chats</button>
-      <span id="history-status" class="history-status" role="status" aria-live="polite"></span>
-    </div>
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true">B</div>
+      <div class="brand-copy"><h1>Buddy</h1><p>Your AI companion</p></div>
+      <span class="status"><i></i> Online</span>
+    </header>
+
+    <nav class="quick-actions" aria-label="Chat tools">
+      <button id="view-memories" class="tool-button" type="button" aria-controls="memories-panel" aria-expanded="false">
+        <span class="tool-icon" aria-hidden="true">✦</span><span>Memories</span>
+      </button>
+      <button id="load-history" class="tool-button" type="button">
+        <span class="tool-icon" aria-hidden="true">◷</span><span>Chat history</span>
+      </button>
+    </nav>
+    <p id="history-status" class="inline-status" role="status" aria-live="polite"></p>
+
     <section id="memories-panel" class="memories-panel" hidden aria-live="polite">
-      <div class="memories-heading">
-        <h2>Saved personal memories</h2>
-        <p id="memories-status">Your saved memories will appear here.</p>
+      <div class="section-heading">
+        <div><h2>Saved memories</h2><p id="memories-status">Your personal notes, kept by Buddy.</p></div>
+        <span class="section-mark" aria-hidden="true">✦</span>
       </div>
       <div id="memories-list" class="memories-list"></div>
     </section>
+
     <section id="chat" class="chat" aria-live="polite">
-      <div class="bubble buddy">Hey! I'm Buddy. What would you like to talk about?</div>
+      <div class="welcome">
+        <div class="welcome-mark" aria-hidden="true">B</div>
+        <h2>Hey, I'm Buddy.</h2>
+        <p>I'm here whenever you need to think, learn, or talk.</p>
+      </div>
+      <div class="bubble buddy">What would you like to talk about?</div>
     </section>
-    <div class="voice-controls" aria-label="Voice assistant controls">
-      <label class="voice-language-label" for="voice-language">Voice language</label>
-      <select id="voice-language" aria-label="Voice language">
-        <option value="en-US">English</option>
-        <option value="bn-BD">বাংলা</option>
-        <option value="ar-SA">العربية</option>
-      </select>
-      <button id="voice-input" type="button" aria-label="Speak to Buddy">🎙️ Talk</button>
-      <button id="voice-replies" type="button" aria-pressed="false">🔊 Voice replies: Off</button>
-      <button id="stop-speaking" type="button">Stop voice</button>
-      <span id="voice-status" role="status" aria-live="polite"></span>
-    </div>
+
+    <details class="voice-dock">
+      <summary><span class="voice-summary-icon" aria-hidden="true">◖</span><span>Voice chat</span><small>Talk and listen</small><span class="chevron" aria-hidden="true">⌄</span></summary>
+      <div class="voice-controls" aria-label="Voice assistant controls">
+        <label class="voice-language-label" for="voice-language">Language</label>
+        <select id="voice-language" aria-label="Voice language">
+          <option value="en-US">English</option>
+          <option value="bn-BD">বাংলা</option>
+          <option value="ar-SA">العربية</option>
+        </select>
+        <div class="voice-buttons">
+          <button id="voice-input" class="talk-button" type="button" aria-label="Speak to Buddy">🎙 Talk</button>
+          <button id="voice-replies" class="secondary-button" type="button" aria-pressed="false">🔊 Replies off</button>
+          <button id="stop-speaking" class="quiet-button" type="button">Stop voice</button>
+        </div>
+        <span id="voice-status" role="status" aria-live="polite"></span>
+      </div>
+    </details>
+
     <form id="chat-form">
-      <input id="message" autocomplete="off" placeholder="Message Buddy..." aria-label="Message Buddy" required>
-      <button id="send" type="submit">Send</button>
+      <div class="composer">
+        <input id="message" autocomplete="off" placeholder="Message Buddy..." aria-label="Message Buddy" required>
+        <button id="send" type="submit" aria-label="Send message"><span>Send</span><b aria-hidden="true">↗</b></button>
+      </div>
     </form>
-    <p class="note">Buddy AI responses are powered by Google Gemini.</p>
+    <p class="note">Made for your conversations <span>•</span> Powered by Gemini</p>
   </main>
   <script src="/app.bundle.js"></script>
 </body>
