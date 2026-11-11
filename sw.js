@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'buddy-app-shell-v3';
+const CACHE_NAME = 'buddy-app-shell-v4';
 const APP_SHELL = [
   '/',
   '/app.bundle.js',
