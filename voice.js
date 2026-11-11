@@ -107,13 +107,14 @@ export async function speakText(text, language = 'en-US') {
     await new Promise((resolve, reject) => {
       audio.onended = resolve;
       audio.onerror = () => reject(new Error('Buddy could not play the generated audio on this device.'));
+      audio.onpause = () => reject(new DOMException('Playback stopped.', 'AbortError'));
     });
   } catch (error) {
     if (error.name === 'AbortError') return;
     console.error('OpenAI Coral voice playback failed:', error);
     throw error;
   } finally {
-    if (activeSpeechAudio) { activeSpeechAudio.onended = null; activeSpeechAudio.onerror = null; }
+    if (activeSpeechAudio) { activeSpeechAudio.onended = null; activeSpeechAudio.onerror = null; activeSpeechAudio.onpause = null; }
     activeSpeechAudio = null;
     if (activeSpeechUrl) URL.revokeObjectURL(activeSpeechUrl);
     activeSpeechUrl = null;
