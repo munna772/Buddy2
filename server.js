@@ -16,7 +16,12 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const BACKUP_API_KEY = (process.env.BACKUP_GEMINI_API_KEY || process.env.Backup_Gemini_Api_Key || '').trim();
-const GEMINI_API_KEYS = [API_KEY, BACKUP_API_KEY].filter(Boolean);
+const BACKUP_API_KEY_2 = (process.env.BACKUP_GEMINI_API_KEY_2 || '').trim();
+const GEMINI_API_KEYS = [
+  { label: 'primary', key: API_KEY },
+  { label: 'backup 1', key: BACKUP_API_KEY },
+  { label: 'backup 2', key: BACKUP_API_KEY_2 }
+].filter(item => item.key);
 const MODEL = (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim();
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
@@ -44,10 +49,11 @@ async function fetchGeminiWithFallback(url, options = {}) {
   let lastError;
 
   for (let index = 0; index < GEMINI_API_KEYS.length; index += 1) {
-    const keyLabel = index === 0 ? 'primary' : 'backup';
+    const configuredKey = GEMINI_API_KEYS[index];
+    const keyLabel = configuredKey.label;
     const headers = {
       ...(options.headers || {}),
-      'x-goog-api-key': GEMINI_API_KEYS[index]
+      'x-goog-api-key': configuredKey.key
     };
 
     let response;
@@ -65,7 +71,7 @@ async function fetchGeminiWithFallback(url, options = {}) {
         error.name !== 'AbortError' &&
         error.name !== 'TimeoutError'
       ) {
-        console.warn('Primary Gemini request had a network error; trying the configured backup key.');
+        console.warn(`Gemini ${keyLabel} request had a network error; trying the next configured key.`);
         continue;
       }
 
@@ -86,7 +92,7 @@ async function fetchGeminiWithFallback(url, options = {}) {
 
     if (fallbackEligible && index < GEMINI_API_KEYS.length - 1) {
       console.warn(
-        `Gemini primary key returned HTTP ${response.status}; trying the configured backup key.`
+        `Gemini ${keyLabel} key returned HTTP ${response.status}; trying the next configured key.`
       );
       continue;
     }
