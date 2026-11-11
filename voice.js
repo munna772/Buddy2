@@ -75,7 +75,22 @@ export async function speakText(text, language = 'en-US') {
   if (!message) return;
 
   if (Capacitor.isNativePlatform()) {
+    if (!Capacitor.isPluginAvailable('TextToSpeech')) {
+      throw new Error('This installed Buddy APK does not include the native Text-to-Speech module yet. A new APK is required before Android can speak. No APK has been built.');
+    }
+
     try {
+      const languageCheck = await TextToSpeech.isLanguageSupported({ lang: language });
+      if (!languageCheck.supported) {
+        const baseLanguage = language.split('-')[0];
+        const available = await TextToSpeech.getSupportedLanguages();
+        const fallback = available.languages?.find(item => item.toLowerCase().startsWith(baseLanguage.toLowerCase()));
+        if (!fallback) {
+          throw new Error('No installed Android voice supports ' + language + '. Install its speech data in Android Text-to-Speech settings, then try again.');
+        }
+        language = fallback;
+      }
+
       await TextToSpeech.stop();
       await TextToSpeech.speak({
         text: message,
@@ -89,7 +104,9 @@ export async function speakText(text, language = 'en-US') {
       return;
     } catch (error) {
       console.error('Native Android text-to-speech failed:', error);
-      throw new Error('Android could not speak. Check that a Text-to-Speech engine and the selected language voice are installed in system settings.');
+      const detail = error?.message || String(error);
+      if (detail.includes('No installed Android voice')) throw error;
+      throw new Error('Android Text-to-Speech failed: ' + detail + '. Check Settings > Additional settings > Languages & input > Text-to-speech output, select an installed engine (such as Speech Services by Google), and install the selected language voice.');
     }
   }
 
