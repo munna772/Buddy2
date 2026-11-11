@@ -27,6 +27,7 @@ before(async () => {
       PORT: String(port),
       BUDDY_ACCESS_TOKEN: ACCESS_TOKEN,
       GEMINI_API_KEY: '',
+      OPENAI_API_KEY: '',
       BACKUP_GEMINI_API_KEY: '',
       SUPABASE_URL: '',
       SUPABASE_SECRET_KEY: ''
@@ -127,4 +128,13 @@ test('rejects oversized JSON bodies with HTTP 413', async () => {
     body: JSON.stringify({ message: 'x'.repeat(140 * 1024) })
   });
   assert.equal(response.status, 413);
+});
+
+test('OpenAI Coral voice endpoint requires authentication and reports missing configuration safely', async () => {
+  const unauthorized = await fetch(baseUrl + '/api/voice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'Hello from Buddy.' }) });
+  assert.equal(unauthorized.status, 401);
+  const unconfigured = await fetch(baseUrl + '/api/voice', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ACCESS_TOKEN }, body: JSON.stringify({ text: 'Hello from Buddy.' }) });
+  assert.equal(unconfigured.status, 503);
+  const data = await unconfigured.json();
+  assert.match(data.error, /OPENAI_API_KEY/);
 });
