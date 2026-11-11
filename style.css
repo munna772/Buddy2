@@ -111,6 +111,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .secondary-button { background: #29364a; color: #e1e9f5; }
 .quiet-button { background: transparent; color: #aeb9c8; border: 1px solid #303b49; }
 #voice-status { grid-column: 1 / -1; min-width: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.wake-word-controls {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
+  gap: 8px; padding: 9px; border: 1px solid #283342; border-radius: 10px;
+  background: #0d131b;
+}
+.wake-word-controls button {
+  min-height: 34px; padding: 6px 11px; border: 1px solid #3a4b62;
+  border-radius: 9px; background: #29364a; color: #e1e9f5;
+  font-size: 11px; font-weight: 700;
+}
+#wake-word-status { flex: 1 1 180px; min-width: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 #chat-form { flex-shrink: 0; padding: 5px 16px 0; }
 .composer {
   display: flex; align-items: center; gap: 8px; padding: 6px 7px 6px 14px;
