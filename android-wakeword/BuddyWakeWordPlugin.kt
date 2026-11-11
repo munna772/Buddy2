@@ -53,6 +53,14 @@ class BuddyWakeWordPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun pause(call: PluginCall) {
+        context.stopService(Intent(context, BuddyWakeWordService::class.java))
+        val result = JSObject()
+        result.put("paused", true)
+        call.resolve(result)
+    }
+
+    @PluginMethod
     fun stop(call: PluginCall) {
         context.getSharedPreferences(BuddyWakeWordService.PREFS, 0)
             .edit().putBoolean("wake_enabled", false).apply()
