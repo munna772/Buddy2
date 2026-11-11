@@ -714,8 +714,8 @@ form.addEventListener("submit", async (event) => {
 
     if (voiceRepliesEnabled || speakNextReply) {
       try {
-        speakText(reply, selectedVoiceLanguage());
-        if (voiceStatus) voiceStatus.textContent = "Buddy is speaking.";
+        await speakText(reply, selectedVoiceLanguage());
+        if (voiceStatus) voiceStatus.textContent = "Buddy finished speaking.";
       } catch (error) {
         if (voiceStatus) voiceStatus.textContent = error.message || "Spoken replies are unavailable.";
       }
