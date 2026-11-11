@@ -41,7 +41,7 @@ if "https://jitpack.io" not in text:
         raise SystemExit("Could not find dependency mavenCentral() repository.")
     repositories = repositories.replace(
         "mavenCentral()",
-        "mavenCentral()\\n        maven { url 'https://jitpack.io' }",
+        "mavenCentral()\n        maven { url 'https://jitpack.io' }",
         1
     )
     text = before + repositories
