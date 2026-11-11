@@ -22,7 +22,8 @@
     "@capacitor/android": "6.2.0",
     "@capacitor-community/speech-recognition": "6.0.1",
     "@capacitor-community/text-to-speech": "4.1.1",
-    "esbuild": "0.24.2"
+    "esbuild": "0.24.2",
+    "@capacitor/app": "6.0.2"
   },
   "devDependencies": {
     "@capacitor/cli": "6.2.0",
