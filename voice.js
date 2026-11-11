@@ -1,11 +1,12 @@
 import { Capacitor } from '@capacitor/core';
 import { SpeechRecognition } from '@capacitor-community/speech-recognition';
+import { TextToSpeech } from '@capacitor-community/text-to-speech';
 
 export async function listenForSpeech(language = 'en-US') {
   if (Capacitor.isNativePlatform()) {
     const availability = await SpeechRecognition.available();
     if (!availability.available) {
-      throw new Error('Speech recognition is not available on this device. Check that Google voice services are installed.');
+      throw new Error('Speech recognition is not available. Check that Google voice services are installed and enabled.');
     }
 
     let permission = await SpeechRecognition.checkPermissions();
@@ -69,12 +70,34 @@ export async function listenForSpeech(language = 'en-US') {
   });
 }
 
-export function speakText(text, language = 'en-US') {
+export async function speakText(text, language = 'en-US') {
+  const message = String(text || '').trim();
+  if (!message) return;
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await TextToSpeech.stop();
+      await TextToSpeech.speak({
+        text: message,
+        lang: language,
+        rate: 1.0,
+        pitch: 1.0,
+        volume: 1.0,
+        category: 'ambient',
+        queueStrategy: 0
+      });
+      return;
+    } catch (error) {
+      console.error('Native Android text-to-speech failed:', error);
+      throw new Error('Android could not speak. Check that a Text-to-Speech engine and the selected language voice are installed in system settings.');
+    }
+  }
+
   if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
-    throw new Error('Spoken replies are not supported by this device.');
+    throw new Error('Spoken replies are not supported by this browser.');
   }
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(String(text || ''));
+  const utterance = new SpeechSynthesisUtterance(message);
   utterance.lang = language;
   utterance.rate = 1;
   utterance.pitch = 1;
@@ -85,6 +108,13 @@ export function speakText(text, language = 'en-US') {
   window.speechSynthesis.speak(utterance);
 }
 
-export function stopSpeaking() {
+export async function stopSpeaking() {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await TextToSpeech.stop();
+    } catch (error) {
+      console.warn('Could not stop native speech:', error);
+    }
+  }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
