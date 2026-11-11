@@ -70,9 +70,13 @@ test('serves the bundled voice-enabled client and voice controls', async () => {
   assert.equal(response.status, 200);
   const script = await response.text();
   assert.match(script, /Voice replies/);
+  assert.match(script, /BuddyWakeWord/);
+  assert.match(script, /Hey Buddy/);
   const shell = await (await fetch(baseUrl)).text();
   assert.match(shell, /id="voice-input"/);
   assert.match(shell, /id="voice-language"/);
+  assert.match(shell, /id="wake-word-toggle"/);
+  assert.match(shell, /id="wake-word-status"/);
 });
 
 test('health endpoint reports configuration without revealing secrets and disables caching', async () => {
