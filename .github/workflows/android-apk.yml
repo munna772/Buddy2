@@ -57,12 +57,11 @@ jobs:
           cp "${SOURCE}/decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx" "${DEST}/"
           cp "${SOURCE}/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx" "${DEST}/"
           cp "${SOURCE}/tokens.txt" "${DEST}/"
-          cp "${SOURCE}/bpe.model" "${DEST}/"
           printf 'HEY BUDDY @HEY_BUDDY\n' > /tmp/buddy-keywords-raw.txt
           sherpa-onnx-cli text2token \
             --tokens "${DEST}/tokens.txt" \
             --tokens-type bpe \
-            --bpe-model "${DEST}/bpe.model" \
+            --bpe-model "${SOURCE}/bpe.model" \
             /tmp/buddy-keywords-raw.txt "${DEST}/keywords.txt"
           test -s "${DEST}/keywords.txt"
           ls -lh "${DEST}"
