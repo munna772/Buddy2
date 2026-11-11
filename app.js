@@ -65,7 +65,7 @@ async function handlePendingWake() {
     voiceRepliesEnabled = true;
     if (voiceRepliesButton) {
       voiceRepliesButton.setAttribute("aria-pressed", "true");
-      voiceRepliesButton.textContent = "🔊 Voice replies: On";
+      voiceRepliesButton.textContent = "🔊 Coral voice: On";
     }
     speakNextReply = true;
     if (voiceStatus) voiceStatus.textContent = "I heard you. Speak now.";
@@ -140,11 +140,11 @@ if (voiceRepliesButton) {
     voiceRepliesEnabled = !voiceRepliesEnabled;
     voiceRepliesButton.setAttribute("aria-pressed", String(voiceRepliesEnabled));
     voiceRepliesButton.textContent = voiceRepliesEnabled
-      ? "🔊 Voice replies: On"
-      : "🔊 Voice replies: Off";
+      ? "🔊 Coral voice: On"
+      : "🔊 Coral voice: Off";
     if (!voiceRepliesEnabled) stopSpeaking();
     if (voiceStatus) voiceStatus.textContent = voiceRepliesEnabled
-      ? "Buddy will speak its replies."
+      ? "Buddy will speak using OpenAI Coral."
       : "Spoken replies are off.";
   });
 }
