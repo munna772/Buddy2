@@ -103,10 +103,10 @@ export async function speakText(text, language = 'en-US') {
     activeSpeechUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(activeSpeechUrl);
     activeSpeechAudio = audio;
+    await audio.play();
     await new Promise((resolve, reject) => {
       audio.onended = resolve;
       audio.onerror = () => reject(new Error('Buddy could not play the generated audio on this device.'));
-      audio.play().catch(reject);
     });
   } catch (error) {
     if (error.name === 'AbortError') return;
