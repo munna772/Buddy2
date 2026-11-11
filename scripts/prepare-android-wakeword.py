@@ -32,8 +32,20 @@ app_gradle.write_text(text)
 settings = android / "settings.gradle"
 text = settings.read_text()
 if "https://jitpack.io" not in text:
-    text = text.replace("mavenCentral()", "mavenCentral()\n        maven { url 'https://jitpack.io' }", 1)
-settings.write_text(text)
+    marker = "dependencyResolutionManagement"
+    index = text.find(marker)
+    if index < 0:
+        raise SystemExit("Could not find dependencyResolutionManagement in settings.gradle.")
+    before, repositories = text[:index], text[index:]
+    if "mavenCentral()" not in repositories:
+        raise SystemExit("Could not find dependency mavenCentral() repository.")
+    repositories = repositories.replace(
+        "mavenCentral()",
+        "mavenCentral()\\n        maven { url 'https://jitpack.io' }",
+        1
+    )
+    text = before + repositories
+    settings.write_text(text)
 
 # Register the native Capacitor plugin before the bridge is initialized.
 main_activity = package_dir / "MainActivity.java"
