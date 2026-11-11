@@ -146,6 +146,7 @@ app.use((_req, res, next) => {
     "style-src 'self'",
     "img-src 'self' data:",
     "connect-src 'self'",
+    "media-src 'self' blob:",
     "upgrade-insecure-requests"
   ].join('; '));
   res.setHeader('X-Content-Type-Options', 'nosniff');
