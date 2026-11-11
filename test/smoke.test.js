@@ -70,7 +70,7 @@ test('serves the bundled voice-enabled client and voice controls', async () => {
   const response = await fetch(`${baseUrl}/app.bundle.js`);
   assert.equal(response.status, 200);
   const script = await response.text();
-  assert.match(script, /Voice replies/);
+  assert.match(script, /Coral voice/);
   assert.match(script, /BuddyWakeWord/);
   assert.match(script, /Hey Buddy/);
   const shell = await (await fetch(baseUrl)).text();
