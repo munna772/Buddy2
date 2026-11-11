@@ -25,35 +25,15 @@ if "apply plugin: 'kotlin-android'" not in text:
     if "\nandroid {" not in text:
         raise SystemExit("Could not find Android app configuration block.")
     text = text.replace("\nandroid {", "\napply plugin: 'kotlin-android'\n\nandroid {", 1)
-if "com.github.k2-fsa:sherpa-onnx:2.0.1" not in text:
+if "sherpa-onnx-2.0.1.aar" not in text:
     text = text.replace(
         "dependencies {",
-        "dependencies {\n    implementation('com.github.k2-fsa:sherpa-onnx:2.0.1') {\n        exclude group: 'com.github.k2-fsa.sherpa-onnx', module: 'sherpa-onnx-jvm'\n    }",
+        "dependencies {\n    implementation files('libs/sherpa-onnx-2.0.1.aar')",
         1
     )
 if "abiFilters" not in text:
     text = text.replace("defaultConfig {", "defaultConfig {\n        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }", 1)
 app_gradle.write_text(text)
-
-# Add JitPack to the root project's dependency repositories.
-root_text = root_gradle.read_text()
-if "https://jitpack.io" not in root_text:
-    marker = "allprojects {"
-    index = root_text.find(marker)
-    if index >= 0:
-        before, projects = root_text[:index], root_text[index:]
-        if "repositories {" in projects:
-            projects = projects.replace(
-                "repositories {",
-                "repositories {\n        maven { url 'https://jitpack.io' }",
-                1
-            )
-            root_text = before + projects
-        else:
-            root_text += "\nallprojects { repositories { maven { url 'https://jitpack.io' } } }\n"
-    else:
-        root_text += "\nallprojects { repositories { google(); mavenCentral(); maven { url 'https://jitpack.io' } } }\n"
-    root_gradle.write_text(root_text)
 
 # Register the native Capacitor plugin before the bridge is initialized.
 main_activity = package_dir / "MainActivity.java"
