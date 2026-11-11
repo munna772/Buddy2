@@ -26,7 +26,11 @@ if "apply plugin: 'kotlin-android'" not in text:
         raise SystemExit("Could not find Android app configuration block.")
     text = text.replace("\nandroid {", "\napply plugin: 'kotlin-android'\n\nandroid {", 1)
 if "com.github.k2-fsa:sherpa-onnx:2.0.1" not in text:
-    text = text.replace("dependencies {", "dependencies {\n    implementation 'com.github.k2-fsa:sherpa-onnx:v2.0.1'", 1)
+    text = text.replace(
+        "dependencies {",
+        "dependencies {\n    implementation('com.github.k2-fsa:sherpa-onnx:2.0.1') {\n        exclude group: 'com.github.k2-fsa.sherpa-onnx', module: 'sherpa-onnx-jvm'\n    }",
+        1
+    )
 if "abiFilters" not in text:
     text = text.replace("defaultConfig {", "defaultConfig {\n        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }", 1)
 app_gradle.write_text(text)
