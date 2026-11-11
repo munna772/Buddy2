@@ -28,6 +28,7 @@ class BuddyWakeWordService : Service() {
         private const val NOTIFICATION_ID = 7721
         private const val SAMPLE_RATE = 16000
         private const val MODEL_DIR = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+        const val ACTION_STOP = "com.buddyai.privateassistant.STOP_WAKE_WORD"
     }
 
     @Volatile private var running = false
@@ -213,7 +214,4 @@ class BuddyWakeWordService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private companion object Actions {
-        const val ACTION_STOP = "com.buddyai.privateassistant.STOP_WAKE_WORD"
-    }
 }
