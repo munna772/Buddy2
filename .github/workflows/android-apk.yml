@@ -9,6 +9,13 @@ on:
       - 'www/**'
       - 'package.json'
       - 'server.js'
+      - 'index.html'
+      - 'style.css'
+      - 'app.js'
+      - 'voice.js'
+      - 'sw.js'
+      - 'manifest.webmanifest'
+      - 'buddy-icon.svg'
       - '.github/workflows/android-apk.yml'
 
 permissions:
