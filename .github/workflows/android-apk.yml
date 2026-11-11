@@ -41,6 +41,15 @@ jobs:
       - name: Generate Android project
         run: npx cap add android
 
+      - name: Download sherpa-onnx Android library
+        run: |
+          mkdir -p android/app/libs
+          curl --fail --location --retry 3 \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-2.0.1.aar" \
+            --output android/app/libs/sherpa-onnx-2.0.1.aar
+          test -s android/app/libs/sherpa-onnx-2.0.1.aar
+          ls -lh android/app/libs/sherpa-onnx-2.0.1.aar
+
       - name: Prepare native Hey Buddy wake-word engine
         run: |
           python -m pip install --disable-pip-version-check sentencepiece==0.2.3
