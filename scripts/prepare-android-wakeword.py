@@ -22,9 +22,9 @@ if "kotlin-gradle-plugin" not in text:
 app_gradle = app / "build.gradle"
 text = app_gradle.read_text()
 if "apply plugin: 'kotlin-android'" not in text:
-    if "\\nandroid {" not in text:
+    if "\nandroid {" not in text:
         raise SystemExit("Could not find Android app configuration block.")
-    text = text.replace("\\nandroid {", "\\napply plugin: 'kotlin-android'\\n\\nandroid {", 1)
+    text = text.replace("\\nandroid {", "\napply plugin: 'kotlin-android'\n\nandroid {", 1)
 if "com.github.k2-fsa:sherpa-onnx:v2.0.1" not in text:
     text = text.replace("dependencies {", "dependencies {\n    implementation 'com.github.k2-fsa:sherpa-onnx:v2.0.1'", 1)
 if "abiFilters" not in text:
