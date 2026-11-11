@@ -2,21 +2,6 @@ name: Build Buddy Android APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'capacitor.config.ts'
-      - 'www/**'
-      - 'package.json'
-      - 'server.js'
-      - 'index.html'
-      - 'style.css'
-      - 'app.js'
-      - 'voice.js'
-      - 'sw.js'
-      - 'manifest.webmanifest'
-      - 'buddy-icon.svg'
-      - '.github/workflows/android-apk.yml'
 
 permissions:
   contents: read
