@@ -511,8 +511,11 @@ if (localStorage.getItem(TOKEN_STORAGE_KEY)) {
 // Keep the foreground service state in sync and resume after Android returns to Buddy.
 if (Capacitor.isNativePlatform()) {
   (async () => {
-    await handlePendingWake();
+    const woke = await handlePendingWake();
     await syncWakeWordStatus();
+    if (!woke && localStorage.getItem(WAKE_WORD_STORAGE_KEY) === "true") {
+      await resumeWakeWordIfEnabled();
+    }
   })();
   App.addListener("appStateChange", async ({ isActive }) => {
     if (!isActive) return;
