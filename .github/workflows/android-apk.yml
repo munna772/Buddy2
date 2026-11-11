@@ -43,7 +43,7 @@ jobs:
 
       - name: Prepare native Hey Buddy wake-word engine
         run: |
-          python -m pip install --disable-pip-version-check sherpa-onnx==1.12.36 click sentencepiece
+          python -m pip install --disable-pip-version-check sentencepiece==0.2.3
           MODEL_DIR="sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
           curl --fail --location --retry 3 \
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/${MODEL_DIR}.tar.bz2" \
@@ -57,12 +57,7 @@ jobs:
           cp "${SOURCE}/decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx" "${DEST}/"
           cp "${SOURCE}/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx" "${DEST}/"
           cp "${SOURCE}/tokens.txt" "${DEST}/"
-          printf 'HEY BUDDY @HEY_BUDDY\n' > /tmp/buddy-keywords-raw.txt
-          sherpa-onnx-cli text2token \
-            --tokens "${DEST}/tokens.txt" \
-            --tokens-type bpe \
-            --bpe-model "${SOURCE}/bpe.model" \
-            /tmp/buddy-keywords-raw.txt "${DEST}/keywords.txt"
+          python scripts/make-wake-keywords.py "${SOURCE}/bpe.model" "${DEST}/keywords.txt"
           test -s "${DEST}/keywords.txt"
           ls -lh "${DEST}"
 
