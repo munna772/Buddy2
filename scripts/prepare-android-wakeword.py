@@ -31,23 +31,25 @@ if "abiFilters" not in text:
     text = text.replace("defaultConfig {", "defaultConfig {\n        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }", 1)
 app_gradle.write_text(text)
 
-settings = android / "settings.gradle"
-text = settings.read_text()
-if "https://jitpack.io" not in text:
-    marker = "dependencyResolutionManagement"
-    index = text.find(marker)
-    if index < 0:
-        raise SystemExit("Could not find dependencyResolutionManagement in settings.gradle.")
-    before, repositories = text[:index], text[index:]
-    if "mavenCentral()" not in repositories:
-        raise SystemExit("Could not find dependency mavenCentral() repository.")
-    repositories = repositories.replace(
-        "mavenCentral()",
-        "mavenCentral()\n        maven { url 'https://jitpack.io' }",
-        1
-    )
-    text = before + repositories
-    settings.write_text(text)
+# Add JitPack to the root project's dependency repositories.
+root_text = root_gradle.read_text()
+if "https://jitpack.io" not in root_text:
+    marker = "allprojects {"
+    index = root_text.find(marker)
+    if index >= 0:
+        before, projects = root_text[:index], root_text[index:]
+        if "repositories {" in projects:
+            projects = projects.replace(
+                "repositories {",
+                "repositories {\n        maven { url 'https://jitpack.io' }",
+                1
+            )
+            root_text = before + projects
+        else:
+            root_text += "\nallprojects { repositories { maven { url 'https://jitpack.io' } } }\n"
+    else:
+        root_text += "\nallprojects { repositories { google(); mavenCentral(); maven { url 'https://jitpack.io' } } }\n"
+    root_gradle.write_text(root_text)
 
 # Register the native Capacitor plugin before the bridge is initialized.
 main_activity = package_dir / "MainActivity.java"
