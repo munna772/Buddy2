@@ -43,7 +43,7 @@ jobs:
 
       - name: Prepare native Hey Buddy wake-word engine
         run: |
-          python -m pip install --disable-pip-version-check sherpa-onnx==1.12.36 click
+          python -m pip install --disable-pip-version-check sherpa-onnx==1.12.36 click sentencepiece
           MODEL_DIR="sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
           curl --fail --location --retry 3 \
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/${MODEL_DIR}.tar.bz2" \
