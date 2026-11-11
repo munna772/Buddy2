@@ -525,6 +525,13 @@ if (Capacitor.isNativePlatform()) {
       await resumeWakeWordIfEnabled();
     }
   });
+  // Also catch the wake event when Buddy is already visible and Android
+  // does not emit a background-to-foreground lifecycle transition.
+  window.setInterval(() => {
+    if (document.visibilityState === "visible") {
+      void handlePendingWake();
+    }
+  }, 900);
 }
 
 // =====================================
