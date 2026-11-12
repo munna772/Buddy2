@@ -135,6 +135,27 @@ function selectedVoiceLanguage() {
   return voiceLanguageSelect?.value || "en-US";
 }
 
+// Avoid showing Coral as available when the server has no OpenAI key configured.
+async function checkCoralVoiceAvailability() {
+  if (!voiceRepliesButton) return;
+  voiceRepliesButton.disabled = true;
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    const health = await response.json().catch(() => ({}));
+    const configured = response.ok && health.openaiVoiceConfigured === true;
+    voiceRepliesButton.disabled = !configured;
+    if (voiceStatus) {
+      voiceStatus.textContent = configured
+        ? "Coral voice is ready."
+        : "Coral voice is unavailable. Add OPENAI_API_KEY in Render.";
+    }
+  } catch {
+    // Keep the feature available if the health check itself is temporarily unreachable.
+    voiceRepliesButton.disabled = false;
+  }
+}
+void checkCoralVoiceAvailability();
+
 if (voiceRepliesButton) {
   voiceRepliesButton.addEventListener("click", () => {
     if (!voiceRepliesEnabled) void unlockSpeechAudio().catch(error => console.warn("Audio unlock failed:", error));
