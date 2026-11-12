@@ -1,6 +1,5 @@
 import { Capacitor } from '@capacitor/core';
 import { SpeechRecognition } from '@capacitor-community/speech-recognition';
-import { TextToSpeech } from '@capacitor-community/text-to-speech';
 
 export async function listenForSpeech(language = 'en-US') {
   if (Capacitor.isNativePlatform()) {
@@ -74,6 +73,20 @@ export async function listenForSpeech(language = 'en-US') {
 let activeSpeechAudio = null;
 let activeSpeechUrl = null;
 let activeSpeechController = null;
+let activeSpeechSource = null;
+let speechAudioContext = null;
+
+// Call this directly from a tap/click so Android WebView and mobile browsers
+// allow Buddy to play audio after the network request finishes.
+export async function unlockSpeechAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return false;
+  if (!speechAudioContext) speechAudioContext = new AudioContextClass();
+  if (speechAudioContext.state === 'suspended') {
+    await speechAudioContext.resume();
+  }
+  return speechAudioContext.state === 'running';
+}
 
 export async function speakText(text, language = 'en-US') {
   const message = String(text || '').trim();
@@ -81,12 +94,10 @@ export async function speakText(text, language = 'en-US') {
   const token = localStorage.getItem('buddy_access_token');
   if (!token) throw new Error('Buddy access token is missing. Reopen Buddy and enter your access token.');
 
-  if (activeSpeechAudio) { activeSpeechAudio.pause(); activeSpeechAudio.currentTime = 0; }
-  if (activeSpeechUrl) URL.revokeObjectURL(activeSpeechUrl);
-  if (activeSpeechController) activeSpeechController.abort();
-
+  await stopSpeaking();
   const controller = new AbortController();
   activeSpeechController = controller;
+
   try {
     const response = await fetch('/api/voice', {
       method: 'POST',
@@ -98,23 +109,56 @@ export async function speakText(text, language = 'en-US') {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'OpenAI voice failed (' + response.status + ').');
     }
+
     const audioBlob = await response.blob();
     if (!audioBlob.size) throw new Error('OpenAI returned an empty voice recording.');
-    activeSpeechUrl = URL.createObjectURL(audioBlob);
-    const audio = new Audio(activeSpeechUrl);
-    activeSpeechAudio = audio;
-    await audio.play();
-    await new Promise((resolve, reject) => {
-      audio.onended = resolve;
-      audio.onerror = () => reject(new Error('Buddy could not play the generated audio on this device.'));
-      audio.onpause = () => reject(new DOMException('Playback stopped.', 'AbortError'));
-    });
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      if (!speechAudioContext) speechAudioContext = new AudioContextClass();
+      if (speechAudioContext.state === 'suspended') await speechAudioContext.resume();
+      if (controller.signal.aborted) return;
+      const encodedAudio = await audioBlob.arrayBuffer();
+      const decodedAudio = await speechAudioContext.decodeAudioData(encodedAudio.slice(0));
+      if (controller.signal.aborted) return;
+
+      await new Promise((resolve, reject) => {
+        const source = speechAudioContext.createBufferSource();
+        activeSpeechSource = source;
+        source.buffer = decodedAudio;
+        source.connect(speechAudioContext.destination);
+        source.onended = () => {
+          if (activeSpeechSource === source) activeSpeechSource = null;
+          resolve();
+        };
+        try {
+          source.start(0);
+        } catch (error) {
+          activeSpeechSource = null;
+          reject(error);
+        }
+      });
+    } else {
+      activeSpeechUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(activeSpeechUrl);
+      activeSpeechAudio = audio;
+      await new Promise((resolve, reject) => {
+        audio.onended = resolve;
+        audio.onerror = () => reject(new Error('Buddy could not play the generated audio on this device.'));
+        audio.onpause = () => resolve();
+        audio.play().catch(reject);
+      });
+    }
   } catch (error) {
     if (error.name === 'AbortError') return;
     console.error('OpenAI Coral voice playback failed:', error);
     throw error;
   } finally {
-    if (activeSpeechAudio) { activeSpeechAudio.onended = null; activeSpeechAudio.onerror = null; activeSpeechAudio.onpause = null; }
+    if (activeSpeechAudio) {
+      activeSpeechAudio.onended = null;
+      activeSpeechAudio.onerror = null;
+      activeSpeechAudio.onpause = null;
+    }
     activeSpeechAudio = null;
     if (activeSpeechUrl) URL.revokeObjectURL(activeSpeechUrl);
     activeSpeechUrl = null;
@@ -122,9 +166,15 @@ export async function speakText(text, language = 'en-US') {
   }
 }
 
-
 export async function stopSpeaking() {
-  if (activeSpeechController) activeSpeechController.abort();
+  if (activeSpeechController) {
+    activeSpeechController.abort();
+    activeSpeechController = null;
+  }
+  if (activeSpeechSource) {
+    try { activeSpeechSource.stop(0); } catch {}
+    activeSpeechSource = null;
+  }
   if (activeSpeechAudio) {
     activeSpeechAudio.pause();
     activeSpeechAudio.currentTime = 0;
