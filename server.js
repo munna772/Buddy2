@@ -6,7 +6,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { randomUUID, timingSafeEqual } = require('crypto');
-const { stripFactPrefix } = require('./memory-utils');
+const { stripFactPrefix, parseMemoryExtraction } = require('./memory-utils');
 
 const app = express();
 
@@ -935,7 +935,7 @@ OUTPUT:
       return [];
     }
 
-    const parsed = JSON.parse(generatedText);
+    const parsed = parseMemoryExtraction(generatedText);
 
     if (!parsed || !Array.isArray(parsed.memories)) {
       console.warn('Gemini memory analysis returned an unexpected JSON shape.');
