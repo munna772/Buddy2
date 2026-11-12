@@ -5,6 +5,7 @@ const { spawn } = require('node:child_process');
 const path = require('node:path');
 const { stripFactPrefix, parseMemoryExtraction } = require('../memory-utils');
 const { createServer } = require('node:net');
+const { readFileSync } = require('node:fs');
 const { after, before, test } = require('node:test');
 
 const ACCESS_TOKEN = 'buddy-test-token-1234567890-abcdefghijklmnopqrstuvwxyz';
@@ -157,4 +158,11 @@ test('memory extraction parser repairs malformed JSON returned by Gemini', () =>
     parseMemoryExtraction('Result: {"memories":["A stable personal preference"]}'),
     { memories: ['A stable personal preference'] }
   );
+});
+
+test('Coral voice UI checks server configuration before enabling voice replies', () => {
+  const source = readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(source, /checkCoralVoiceAvailability/);
+  assert.match(source, /health\.openaiVoiceConfigured === true/);
+  assert.match(source, /voiceRepliesButton\.disabled = !configured/);
 });
