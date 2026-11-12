@@ -15,18 +15,17 @@
     "node": ">=18"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "express-rate-limit": "^7.5.0",
-    "dotenv": "^16.4.7",
-    "@capacitor/core": "6.2.0",
-    "@capacitor/android": "6.2.0",
+    "express": "^4.22.3",
+    "express-rate-limit": "^8.7.0",
+    "dotenv": "^16.6.1",
+    "@capacitor/core": "6.2.3",
+    "@capacitor/android": "6.2.3",
     "@capacitor-community/speech-recognition": "6.0.1",
-    "@capacitor-community/text-to-speech": "4.1.1",
-    "esbuild": "0.24.2",
+    "esbuild": "0.28.2",
     "@capacitor/app": "6.0.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "6.2.0",
-    "typescript": "5.6.3"
+    "@capacitor/cli": "6.2.3",
+    "typescript": "5.9.3"
   }
 }
