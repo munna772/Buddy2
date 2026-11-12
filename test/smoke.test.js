@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
-const { stripFactPrefix } = require('../memory-utils');
+const { stripFactPrefix, parseMemoryExtraction } = require('../memory-utils');
 const { createServer } = require('node:net');
 const { after, before, test } = require('node:test');
 
@@ -146,4 +146,15 @@ test('memory prefix normalization removes the FACT marker and preserves memory t
   assert.equal(stripFactPrefix('FACT: favorite color is black'), 'favorite color is black');
   assert.equal(stripFactPrefix('fact:   my cat is Meamy'), 'my cat is Meamy');
   assert.equal(stripFactPrefix('ordinary text'), 'ordinary text');
+});
+
+test('memory extraction parser repairs malformed JSON returned by Gemini', () => {
+  assert.deepEqual(
+    parseMemoryExtraction('```json\n{"memories":["User said "I like this" yesterday",]}\n```'),
+    { memories: ['User said "I like this" yesterday'] }
+  );
+  assert.deepEqual(
+    parseMemoryExtraction('Result: {"memories":["A stable personal preference"]}'),
+    { memories: ['A stable personal preference'] }
+  );
 });
