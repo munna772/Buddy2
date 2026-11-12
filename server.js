@@ -6,6 +6,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { randomUUID, timingSafeEqual } = require('crypto');
+const { stripFactPrefix } = require('./memory-utils');
 
 const app = express();
 
