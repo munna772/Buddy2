@@ -12,7 +12,7 @@
     "postinstall": "npm run build"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
     "express": "^4.22.3",
@@ -27,5 +27,10 @@
   "devDependencies": {
     "@capacitor/cli": "6.2.3",
     "typescript": "5.9.3"
+  },
+  "overrides": {
+    "tar": "7.5.22",
+    "glob": "14.0.4",
+    "minimatch": "11.0.8"
   }
 }
