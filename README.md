@@ -25,6 +25,7 @@ Configure these in your hosting provider's private environment-variable settings
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Yes | Gemini API key |
 | `GEMINI_MODEL` | No | Gemini model name; defaults to `gemini-3.8-flash` in the current server code |
+| `OPENAI_API_KEY` | No | OpenAI API key used only for Coral text-to-speech; Gemini remains the chat model |
 | `BUDDY_ACCESS_TOKEN` | Yes | Private app access token; must contain at least 32 bytes |
 | `SUPABASE_URL` | No | Supabase project URL; enables persistent memory when used with the secret key |
 | `SUPABASE_SECRET_KEY` | No | Supabase secret key; keep it server-side only |
