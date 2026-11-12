@@ -1,4 +1,4 @@
-import { listenForSpeech, speakText, stopSpeaking } from './voice.js';
+import { listenForSpeech, speakText, stopSpeaking, unlockSpeechAudio } from './voice.js';
 import { App } from '@capacitor/app';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
@@ -137,6 +137,7 @@ function selectedVoiceLanguage() {
 
 if (voiceRepliesButton) {
   voiceRepliesButton.addEventListener("click", () => {
+    if (!voiceRepliesEnabled) void unlockSpeechAudio().catch(error => console.warn("Audio unlock failed:", error));
     voiceRepliesEnabled = !voiceRepliesEnabled;
     voiceRepliesButton.setAttribute("aria-pressed", String(voiceRepliesEnabled));
     voiceRepliesButton.textContent = voiceRepliesEnabled
@@ -158,6 +159,7 @@ if (stopSpeakingButton) {
 
 if (voiceInputButton) {
   voiceInputButton.addEventListener("click", async () => {
+    void unlockSpeechAudio().catch(error => console.warn("Audio unlock failed:", error));
     if (activeController) return;
     voiceInputButton.disabled = true;
     await pauseWakeWord();
