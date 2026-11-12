@@ -23,5 +23,7 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Audit dependency vulnerabilities
+        run: npm audit --audit-level=moderate
       - name: Run smoke tests
         run: npm test
