@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const { stripFactPrefix } = require('../memory-utils');
 const { createServer } = require('node:net');
 const { after, before, test } = require('node:test');
 
@@ -139,4 +140,10 @@ test('OpenAI Coral voice endpoint requires authentication and reports missing co
   assert.equal(unconfigured.status, 503);
   const data = await unconfigured.json();
   assert.match(data.error, /OPENAI_API_KEY/);
+});
+
+test('memory prefix normalization removes the FACT marker and preserves memory text', () => {
+  assert.equal(stripFactPrefix('FACT: favorite color is black'), 'favorite color is black');
+  assert.equal(stripFactPrefix('fact:   my cat is Meamy'), 'my cat is Meamy');
+  assert.equal(stripFactPrefix('ordinary text'), 'ordinary text');
 });
