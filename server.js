@@ -534,7 +534,7 @@ app.get('/api/memories', requireAccess, async (_req, res) => {
       )
       .map(row => ({
         id: row.id,
-        content: row.content.replace(/^FACT:\\s*/i, ''),
+        content: stripFactPrefix(row.content),
         created_at: row.created_at || null
       }));
 
@@ -594,7 +594,7 @@ app.patch('/api/memories/:id', requireAccess, async (req, res) => {
     return res.json({
       memory: {
         id: rows[0].id,
-        content: String(rows[0].content || '').replace(/^FACT:\\s*/i, ''),
+        content: stripFactPrefix(rows[0].content),
         created_at: rows[0].created_at || null
       }
     });
@@ -1601,5 +1601,7 @@ app.use((error, _req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Buddy AI listening on port ${PORT}`);
   console.log(`Gemini model: ${MODEL}`);
+  console.log(`Gemini API keys configured: ${GEMINI_API_KEYS.length}`);
   console.log(`Supabase configured: ${DATABASE_CONFIGURED}`);
+  console.log(`OpenAI Coral voice configured: ${Boolean(OPENAI_API_KEY)}`);
 });
