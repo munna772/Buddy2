@@ -12,7 +12,7 @@ Buddy is a private, single-user chat app backed by a Node.js/Express server and 
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 22 or newer
 - A Gemini API key from Google AI Studio
 - A hosting provider that can run a persistent Node.js web service
 - Supabase project and a `memories` table if persistent conversation and extracted-fact memory is wanted
