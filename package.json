@@ -9,7 +9,7 @@
     "dev": "node --watch server.js",
     "test": "node --test",
     "build": "esbuild app.js --bundle --format=iife --platform=browser --target=es2020 --outfile=app.bundle.js",
-    "postinstall": "npm run build"
+    "postinstall": "node scripts/patch-capacitor-tar.mjs && npm run build"
   },
   "engines": {
     "node": "22.x"
@@ -28,7 +28,7 @@
     "typescript": "5.9.3"
   },
   "overrides": {
-    "tar": "6.2.1",
+    "tar": "7.5.22",
     "glob": "14.0.4",
     "minimatch": "11.0.8"
   }
