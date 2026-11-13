@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#090b10">
-  <meta name="description" content="Buddy AI — your private personal AI assistant.">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080d17">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Buddy AI — your private personal AI companion.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/buddy-icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/buddy-icon.svg">
@@ -14,48 +15,95 @@
 <body>
   <main class="app">
     <header class="topbar">
-      <div class="brand-mark" aria-hidden="true">B</div>
-      <div class="brand-copy"><h1>Buddy</h1><p>Your AI companion</p></div>
-      <span class="status"><i></i> Online</span>
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true"><span>B</span><i></i></div>
+        <div class="brand-copy">
+          <h1>Buddy<span class="brand-period">.</span></h1>
+          <p>YOUR PERSONAL AI</p>
+        </div>
+      </div>
+      <div class="connection-pill" id="connection-pill" data-state="checking" role="status" aria-live="polite">
+        <span class="connection-dot" aria-hidden="true"></span>
+        <span id="connection-status">Connecting</span>
+      </div>
     </header>
 
-    <nav class="quick-actions" aria-label="Chat tools">
-      <button id="view-memories" class="tool-button" type="button" aria-controls="memories-panel" aria-expanded="false">
-        <span class="tool-icon" aria-hidden="true">✦</span><span>Memories</span>
-      </button>
-      <button id="load-history" class="tool-button" type="button">
-        <span class="tool-icon" aria-hidden="true">◷</span><span>Chat history</span>
-      </button>
+    <nav class="toolbar" aria-label="Buddy tools">
+      <span class="toolbar-label">WORKSPACE</span>
+      <div class="toolbar-actions">
+        <button id="view-memories" class="tool-button" type="button" aria-controls="memories-panel" aria-expanded="false">
+          <span class="tool-icon" aria-hidden="true">✧</span><span>Memories</span>
+        </button>
+        <button id="load-history" class="tool-button" type="button">
+          <span class="tool-icon" aria-hidden="true">◷</span><span>History</span>
+        </button>
+        <button id="manage-access" class="tool-button access-button" type="button">
+          <span class="tool-icon" aria-hidden="true">⌑</span><span>Access</span>
+        </button>
+      </div>
     </nav>
+
     <p id="history-status" class="inline-status" role="status" aria-live="polite"></p>
 
     <section id="memories-panel" class="memories-panel" hidden aria-live="polite">
       <div class="section-heading">
-        <div><h2>Saved memories</h2><p id="memories-status">Your personal notes, kept by Buddy.</p></div>
+        <div>
+          <span class="eyebrow">LONG-TERM CONTEXT</span>
+          <h2>Saved memories</h2>
+          <p id="memories-status">Personal details Buddy can use when relevant.</p>
+        </div>
         <span class="section-mark" aria-hidden="true">✦</span>
       </div>
       <div id="memories-list" class="memories-list"></div>
     </section>
 
-    <section id="chat" class="chat" aria-live="polite">
-      <div class="welcome">
-        <div class="welcome-mark" aria-hidden="true">B</div>
-        <h2>Hey, I'm Buddy.</h2>
-        <p>I'm here whenever you need to think, learn, or talk.</p>
+    <section id="chat" class="chat" aria-label="Conversation with Buddy" aria-live="polite" aria-relevant="additions text">
+      <div class="welcome" id="welcome">
+        <div class="welcome-orbit" aria-hidden="true"><span class="welcome-mark">B</span><i></i></div>
+        <span class="eyebrow">YOUR SPACE. YOUR BUDDY.</span>
+        <h2>Ready when you are.</h2>
+        <p>Think out loud, ask anything, or pick up where you left off.</p>
+        <div class="welcome-suggestions" aria-label="Suggested messages">
+          <button type="button" data-prompt="Help me understand something difficult.">✧ <span>Explain something</span></button>
+          <button type="button" data-prompt="Help me organise my thoughts and make a plan.">◈ <span>Make a plan</span></button>
+          <button type="button" data-prompt="I want to talk something through.">☾ <span>Talk it through</span></button>
+        </div>
       </div>
-      <div class="bubble buddy">What would you like to talk about?</div>
+      <div class="bubble buddy">Hey, I'm Buddy. What's on your mind?</div>
     </section>
 
-ils>
-
-    <form id="chat-form">
-      <div class="composer">
-        <input id="message" autocomplete="off" placeholder="Message Buddy..." aria-label="Message Buddy" required>
-        <button id="send" type="submit" aria-label="Send message"><span>Send</span><b aria-hidden="true">↗</b></button>
+    <form id="chat-form" autocomplete="off">
+      <div class="composer-shell">
+        <div class="composer">
+          <span class="composer-spark" aria-hidden="true">✧</span>
+          <input id="message" name="message" type="text" maxlength="4000" autocomplete="off" placeholder="Message Buddy..." aria-label="Message Buddy" required>
+          <span class="message-count" id="message-count" aria-live="off">0 / 4000</span>
+          <button id="send" type="submit" aria-label="Send message">
+            <span>Send</span><b aria-hidden="true">↗</b>
+          </button>
+        </div>
+        <p class="composer-note"><span class="note-pulse" aria-hidden="true"></span> PRIVATE SESSION <span class="note-divider">·</span> GEMINI-POWERED</p>
       </div>
     </form>
-    <p class="note">Gemini-powered text assistant</p>
   </main>
+
+  <dialog id="access-dialog" class="access-dialog" aria-labelledby="access-title">
+    <div class="dialog-card">
+      <span class="eyebrow">SECURE CONNECTION</span>
+      <h2 id="access-title">Connect to Buddy</h2>
+      <p>Your private access token connects this app to your Buddy service. It stays on this device.</p>
+      <form id="access-form">
+        <label for="access-token">Buddy access token</label>
+        <input id="access-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste your access token" required>
+        <p id="access-error" class="access-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button id="access-cancel" class="dialog-secondary" type="button">Cancel</button>
+          <button class="dialog-primary" type="submit">Save securely <span aria-hidden="true">↗</span></button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
   <script src="/app.bundle.js"></script>
 </body>
 </html>
