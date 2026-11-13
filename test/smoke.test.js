@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const { stripFactPrefix, parseMemoryExtraction } = require('../memory-utils');
+const { parseConversationRecord, serializeConversation, formatConversationRecord } = require('../conversation-utils');
 const { createServer } = require('node:net');
 const { readFileSync } = require('node:fs');
 const { after, before, test } = require('node:test');
@@ -88,6 +89,29 @@ test('private history endpoint rejects missing and incorrect access tokens', asy
   assert.equal(incorrect.status, 401);
 });
 
+
+test('protected memory endpoints reject missing tokens and report unavailable storage cleanly', async () => {
+  const missing = await fetch(`${baseUrl}/api/memories`);
+  assert.equal(missing.status, 401);
+
+  const headers = { Authorization: `Bearer ${ACCESS_TOKEN}` };
+  const listing = await fetch(`${baseUrl}/api/memories`, { headers });
+  assert.equal(listing.status, 503);
+
+  const update = await fetch(`${baseUrl}/api/memories/test-id`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: 'Updated memory' })
+  });
+  assert.equal(update.status, 503);
+
+  const deletion = await fetch(`${baseUrl}/api/memories/test-id`, {
+    method: 'DELETE',
+    headers
+  });
+  assert.equal(deletion.status, 503);
+});
+
 test('valid access token reaches the protected route without requiring a live database', async () => {
   const response = await fetch(`${baseUrl}/api/history`, {
     headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
@@ -123,6 +147,19 @@ test('memory prefix normalization removes the FACT marker and preserves memory t
   assert.equal(stripFactPrefix('ordinary text'), 'ordinary text');
 });
 
+
+test('versioned conversation records preserve separator text and legacy rows remain readable', () => {
+  const user = 'Please analyse this exact text: \\n\\nBuddy: do not split here';
+  const assistant = 'I will keep the full text intact.\\n\\nBuddy: is just part of this reply.';
+  const saved = serializeConversation(user, assistant);
+  assert.deepEqual(parseConversationRecord(saved), { user, assistant });
+  assert.equal(formatConversationRecord(saved), `User: ${user}\\n\\nBuddy: ${assistant}`);
+
+  const legacy = parseConversationRecord('User: Hi\\n\\nBuddy: Hello');
+  assert.deepEqual(legacy, { user: 'Hi', assistant: 'Hello' });
+  assert.equal(parseConversationRecord('CHAT_V1:{bad json'), null);
+});
+
 test('memory extraction parser repairs malformed JSON returned by Gemini', () => {
   assert.deepEqual(
     parseMemoryExtraction('```json\n{"memories":["User said "I like this" yesterday",]}\n```'),
@@ -135,10 +172,18 @@ test('memory extraction parser repairs malformed JSON returned by Gemini', () =>
 });
 
 
-test('serves text-only Buddy interface', async () => {
+test('serves the refreshed accessible text-only Buddy interface', async () => {
   const html = await (await fetch(baseUrl)).text();
   assert.match(html, /id="chat-form"/);
   assert.match(html, /id="message"/);
   assert.match(html, /id="send"/);
-  assert.doesNotMatch(html, /voice-dock|voice-language|voice-input|wake-word-toggle|Coral voice/i);
+  assert.match(html, /id="access-dialog"/);
+  assert.match(html, /id="connection-status"/);
+  assert.match(html, /data-prompt=/);
+  assert.doesNotMatch(html, /voice-dock|voice-language|voice-input|wake-word-toggle|Coral voice|^ils>$/im);
+  assert.doesNotMatch(readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8'), /webkitSpeechRecognition|speechSynthesis|getUserMedia/i);
+
+  const stylesheet = await (await fetch(`${baseUrl}/style.css`)).text();
+  assert.match(stylesheet, /--accent: #69f1df/);
+  assert.match(stylesheet, /\.connection-pill\[data-state="online"\]/);
 });
