@@ -3,6 +3,16 @@ const form = document.getElementById("chat-form");
 const input = document.getElementById("message");
 const send = document.getElementById("send");
 const chat = document.getElementById("chat");
+const accessDialog = document.getElementById("access-dialog");
+const accessForm = document.getElementById("access-form");
+const accessInput = document.getElementById("access-token");
+const accessError = document.getElementById("access-error");
+const accessButton = document.getElementById("manage-access");
+const accessCancel = document.getElementById("access-cancel");
+const connectionPill = document.getElementById("connection-pill");
+const connectionStatus = document.getElementById("connection-status");
+const messageCount = document.getElementById("message-count");
+const sendLabel = send?.querySelector("span") || send;
 
 if (!form || !input || !send || !chat) {
   throw new Error("Buddy chat interface elements are missing.");
@@ -23,6 +33,7 @@ let activeController = null;
 const stopButton = document.createElement("button");
 
 stopButton.type = "button";
+stopButton.id = "buddy-stop";
 stopButton.className = send.className;
 stopButton.textContent = "Stop";
 stopButton.hidden = true;
@@ -56,24 +67,74 @@ function addBubble(text, who) {
 }
 
 // =====================================
-// GET ACCESS TOKEN
+// SECURE ACCESS DIALOG
 // =====================================
 
+function openAccessDialog() {
+  if (!accessDialog || !accessInput || !accessError) {
+    throw new Error("Buddy's access form is unavailable. Refresh the app and try again.");
+  }
+
+  accessError.textContent = "";
+  accessInput.value = "";
+
+  if (typeof accessDialog.showModal === "function") {
+    if (!accessDialog.open) accessDialog.showModal();
+    window.setTimeout(() => accessInput.focus(), 50);
+    return;
+  }
+
+  // Compatibility fallback for older Android WebViews without <dialog>.
+  const entered = window.prompt("Enter your Buddy access token:");
+  if (entered && new TextEncoder().encode(entered.trim()).length >= 32) {
+    localStorage.setItem(TOKEN_STORAGE_KEY, entered.trim());
+    if (historyButton) loadConversationHistory(true);
+  } else if (entered !== null) {
+    window.alert("The Buddy access token must contain at least 32 bytes.");
+  }
+}
+
 function getAccessToken() {
-  let token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
 
   if (!token) {
-    token = window.prompt("Enter your Buddy access token:");
-
-    if (!token || !token.trim()) {
-      throw new Error("Buddy access token is required.");
-    }
-
-    token = token.trim();
-    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    openAccessDialog();
+    throw new Error("Connect your Buddy access token, then send the message again.");
   }
 
   return token;
+}
+
+if (accessButton) {
+  accessButton.addEventListener("click", openAccessDialog);
+}
+
+if (accessCancel && accessDialog) {
+  accessCancel.addEventListener("click", () => accessDialog.close());
+}
+
+if (accessForm && accessDialog && accessInput && accessError) {
+  accessForm.addEventListener("submit", event => {
+    event.preventDefault();
+    const token = accessInput.value.trim();
+    const tokenBytes = new TextEncoder().encode(token).length;
+
+    if (tokenBytes < 32) {
+      accessError.textContent = "Your access token must contain at least 32 bytes.";
+      accessInput.focus();
+      return;
+    }
+
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    accessDialog.close();
+    accessInput.value = "";
+    accessError.textContent = "";
+
+    if (historyStatus) {
+      historyStatus.textContent = "Secure access token saved on this device.";
+    }
+    if (historyButton) loadConversationHistory(true);
+  });
 }
 
 // =====================================
@@ -253,18 +314,34 @@ const historyButton = document.getElementById("load-history");
 const historyStatus = document.getElementById("history-status");
 
 function parseSavedConversation(content) {
-  if (typeof content !== "string" || !content.startsWith("User: ")) {
-    return null;
+  if (typeof content !== "string") return null;
+
+  // Versioned JSON preserves messages even when either side contains the
+  // legacy "User:" / "Buddy:" separator text.
+  if (content.startsWith("CHAT_V1:")) {
+    try {
+      const record = JSON.parse(content.slice("CHAT_V1:".length));
+      if (
+        typeof record.user === "string" &&
+        typeof record.assistant === "string" &&
+        record.user.trim() &&
+        record.assistant.trim()
+      ) {
+        return { userText: record.user, buddyText: record.assistant };
+      }
+    } catch {
+      return null;
+    }
   }
 
+  // Read older conversation rows saved before CHAT_V1 was introduced.
+  if (!content.startsWith("User: ")) return null;
   const separator = "\n\nBuddy: ";
   const separatorIndex = content.indexOf(separator);
-
   if (separatorIndex < 0) return null;
 
   const userText = content.slice(6, separatorIndex).trim();
   const buddyText = content.slice(separatorIndex + separator.length).trim();
-
   if (!userText || !buddyText) return null;
 
   return { userText, buddyText };
@@ -561,12 +638,14 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
+  document.getElementById("welcome")?.remove();
   const userBubble = addBubble(message, "user");
 
   input.value = "";
+  if (messageCount) messageCount.textContent = "0 / 4000";
 
   send.disabled = true;
-  send.textContent = "...";
+  sendLabel.textContent = "Sending";
 
   stopButton.hidden = false;
   stopButton.disabled = false;
@@ -639,6 +718,7 @@ form.addEventListener("submit", async (event) => {
 
     // Receive response progressively
     const reply = await readStream(response, waiting);
+    setConnectionState("online", "Service online");
 
     // Save completed conversation
     history.push(
@@ -677,6 +757,9 @@ form.addEventListener("submit", async (event) => {
 
     const partial = waiting.textContent;
     const friendlyError = getFriendlyChatError(error);
+    if (/failed to fetch|networkerror|load failed|internet/i.test(String(error?.message || ""))) {
+      setConnectionState("offline", "Connection issue");
+    }
 
     waiting.textContent =
       partial === "Buddy is thinking..."
@@ -689,7 +772,7 @@ form.addEventListener("submit", async (event) => {
     activeController = null;
 
     send.disabled = false;
-    send.textContent = "Send";
+    sendLabel.textContent = "Send";
 
     stopButton.hidden = true;
     stopButton.disabled = false;
@@ -711,3 +794,61 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
     });
   });
 }
+
+// =====================================
+// CONNECTION STATUS AND COMPOSER HELPERS
+// =====================================
+
+function setConnectionState(state, label) {
+  if (!connectionPill || !connectionStatus) return;
+  connectionPill.dataset.state = state;
+  connectionStatus.textContent = label;
+}
+
+async function checkBuddyConnection() {
+  if (!connectionPill || !connectionStatus) return;
+
+  if (navigator.onLine === false) {
+    setConnectionState("offline", "No internet");
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/health", {
+      method: "GET",
+      cache: "no-store",
+      headers: { "Accept": "application/json" }
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data.ok !== true) {
+      throw new Error("Buddy service is not ready.");
+    }
+
+    setConnectionState("online", "Service online");
+  } catch {
+    setConnectionState("offline", "Service unavailable");
+  }
+}
+
+if (messageCount) {
+  const updateMessageCount = () => {
+    messageCount.textContent = `${input.value.length.toLocaleString()} / 4000`;
+  };
+  input.addEventListener("input", updateMessageCount);
+  updateMessageCount();
+}
+
+document.querySelectorAll("[data-prompt]").forEach(button => {
+  button.addEventListener("click", () => {
+    const prompt = button.getAttribute("data-prompt");
+    if (!prompt) return;
+    input.value = prompt;
+    input.focus();
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+});
+
+window.addEventListener("online", checkBuddyConnection);
+window.addEventListener("offline", () => setConnectionState("offline", "No internet"));
+checkBuddyConnection();
