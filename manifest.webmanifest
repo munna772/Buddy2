@@ -2,13 +2,13 @@
   "id": "/",
   "name": "Buddy AI",
   "short_name": "Buddy",
-  "description": "Your private personal AI assistant.",
+  "description": "Your private personal AI companion.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#101827",
-  "theme_color": "#101827",
+  "background_color": "#080d17",
+  "theme_color": "#080d17",
   "icons": [
     {
       "src": "/buddy-icon.svg",
