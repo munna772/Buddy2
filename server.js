@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { randomUUID, timingSafeEqual } = require('crypto');
 const { stripFactPrefix, parseMemoryExtraction } = require('./memory-utils');
+const { parseConversationRecord, serializeConversation, formatConversationRecord } = require('./conversation-utils');
 
 const app = express();
 
@@ -372,17 +373,7 @@ async function getMemories() {
     const conversationText = validConversations
       .reverse()
       .map(row => {
-        let content = row.content;
-        if (content.startsWith('CHAT_V1:')) {
-          try {
-            const record = JSON.parse(content.slice('CHAT_V1:'.length));
-            if (typeof record.user === 'string' && typeof record.assistant === 'string') {
-              content = `User: ${record.user}\n\nBuddy: ${record.assistant}`;
-            }
-          } catch {
-            // Ignore malformed versioned rows and retain their raw text.
-          }
-        }
+        const content = formatConversationRecord(row.content);
         const date = row.created_at ? ` [${row.created_at}]` : '';
         return `${content}${date}`;
       })
@@ -421,7 +412,7 @@ async function saveToSupabase(content) {
     }),
     body: JSON.stringify({
       id: randomUUID(),
-      content: String(content).slice(0, 12000)
+      content: String(content).slice(0, 20000)
     }),
     signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
   });
@@ -658,7 +649,7 @@ app.get('/api/history', requireAccess, async (_req, res) => {
         row &&
         typeof row.id === 'string' &&
         typeof row.content === 'string' &&
-        (row.content.startsWith('User: ') || row.content.startsWith('CHAT_V1:'))
+        parseConversationRecord(row.content) !== null
       )
       .map(row => ({
         id: row.id,
@@ -1458,12 +1449,7 @@ app.post('/api/chat', requireAccess, async (req, res) => {
     res.end();
 
     try {
-      const conversationRecord = `CHAT_V1:${JSON.stringify({
-        version: 1,
-        user: message,
-        assistant: reply
-      })}`;
-      await saveToSupabase(conversationRecord);
+      await saveToSupabase(serializeConversation(message, reply));
     } catch (error) {
       console.error('Conversation saving failed:', error.message);
     }
