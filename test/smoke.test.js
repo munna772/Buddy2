@@ -29,7 +29,6 @@ before(async () => {
       PORT: String(port),
       BUDDY_ACCESS_TOKEN: ACCESS_TOKEN,
       GEMINI_API_KEY: '',
-      OPENAI_API_KEY: '',
       BACKUP_GEMINI_API_KEY: '',
       SUPABASE_URL: '',
       SUPABASE_SECRET_KEY: ''
@@ -66,22 +65,6 @@ test('serves the app shell with baseline security headers', async () => {
   assert.equal(response.headers.get('x-frame-options'), 'DENY');
   assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
   assert.match(await response.text(), /Buddy AI/);
-});
-
-test('serves the bundled voice-enabled client and voice controls', async () => {
-  const response = await fetch(`${baseUrl}/app.bundle.js`);
-  assert.equal(response.status, 200);
-  const script = await response.text();
-  assert.match(script, /Coral voice/);
-  assert.match(script, /unlockSpeechAudio/);
-  assert.match(script, /AudioContext/);
-  assert.match(script, /BuddyWakeWord/);
-  assert.match(script, /Hey Buddy/);
-  const shell = await (await fetch(baseUrl)).text();
-  assert.match(shell, /id="voice-input"/);
-  assert.match(shell, /id="voice-language"/);
-  assert.match(shell, /id="wake-word-toggle"/);
-  assert.match(shell, /id="wake-word-status"/);
 });
 
 test('health endpoint reports configuration without revealing secrets and disables caching', async () => {
@@ -134,15 +117,6 @@ test('rejects oversized JSON bodies with HTTP 413', async () => {
   assert.equal(response.status, 413);
 });
 
-test('OpenAI Coral voice endpoint requires authentication and reports missing configuration safely', async () => {
-  const unauthorized = await fetch(baseUrl + '/api/voice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'Hello from Buddy.' }) });
-  assert.equal(unauthorized.status, 401);
-  const unconfigured = await fetch(baseUrl + '/api/voice', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ACCESS_TOKEN }, body: JSON.stringify({ text: 'Hello from Buddy.' }) });
-  assert.equal(unconfigured.status, 503);
-  const data = await unconfigured.json();
-  assert.match(data.error, /OPENAI_API_KEY/);
-});
-
 test('memory prefix normalization removes the FACT marker and preserves memory text', () => {
   assert.equal(stripFactPrefix('FACT: favorite color is black'), 'favorite color is black');
   assert.equal(stripFactPrefix('fact:   my cat is Meamy'), 'my cat is Meamy');
@@ -160,9 +134,11 @@ test('memory extraction parser repairs malformed JSON returned by Gemini', () =>
   );
 });
 
-test('Coral voice UI checks server configuration before enabling voice replies', () => {
-  const source = readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
-  assert.match(source, /checkCoralVoiceAvailability/);
-  assert.match(source, /health\.openaiVoiceConfigured === true/);
-  assert.match(source, /voiceRepliesButton\.disabled = !configured/);
+
+test('serves text-only Buddy interface', async () => {
+  const html = await (await fetch(baseUrl)).text();
+  assert.match(html, /id="chat-form"/);
+  assert.match(html, /id="message"/);
+  assert.match(html, /id="send"/);
+  assert.doesNotMatch(html, /voice-dock|voice-language|voice-input|wake-word-toggle|Coral voice/i);
 });

@@ -1,9 +1,3 @@
-import { listenForSpeech, speakText, stopSpeaking, unlockSpeechAudio } from './voice.js';
-import { App } from '@capacitor/app';
-import { Capacitor, registerPlugin } from '@capacitor/core';
-
-const BuddyWakeWord = registerPlugin('BuddyWakeWord');
-
 
 const form = document.getElementById("chat-form");
 const input = document.getElementById("message");
@@ -21,187 +15,6 @@ const MAX_HISTORY = 12;
 const TOKEN_STORAGE_KEY = "buddy_access_token";
 
 let activeController = null;
-let voiceRepliesEnabled = false;
-let speakNextReply = false;
-
-const voiceInputButton = document.getElementById("voice-input");
-const voiceRepliesButton = document.getElementById("voice-replies");
-const stopSpeakingButton = document.getElementById("stop-speaking");
-const voiceLanguageSelect = document.getElementById("voice-language");
-const voiceStatus = document.getElementById("voice-status");
-const wakeWordButton = document.getElementById("wake-word-toggle");
-const wakeWordStatus = document.getElementById("wake-word-status");
-const voiceDock = document.querySelector(".voice-dock");
-const WAKE_WORD_STORAGE_KEY = "buddy_wake_word_enabled";
-
-function nativeWakeWordAvailable() {
-  return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("BuddyWakeWord");
-}
-
-async function pauseWakeWord() {
-  if (!nativeWakeWordAvailable()) return;
-  try { await BuddyWakeWord.pause(); } catch (error) {
-    console.warn("Could not pause Hey Buddy listener:", error);
-  }
-}
-
-async function resumeWakeWordIfEnabled() {
-  if (!nativeWakeWordAvailable() || localStorage.getItem(WAKE_WORD_STORAGE_KEY) !== "true") return;
-  try {
-    await BuddyWakeWord.start();
-    if (wakeWordStatus) wakeWordStatus.textContent = "Listening for “Hey Buddy” in the background.";
-    if (wakeWordButton) wakeWordButton.textContent = "Disable Hey Buddy";
-  } catch (error) {
-    if (wakeWordStatus) wakeWordStatus.textContent = error.message || "Could not restart Hey Buddy listening.";
-  }
-}
-
-async function handlePendingWake() {
-  if (!nativeWakeWordAvailable()) return false;
-  try {
-    const result = await BuddyWakeWord.consumeWake();
-    if (!result.wakeDetected) return false;
-    if (voiceDock) voiceDock.open = true;
-    voiceRepliesEnabled = true;
-    if (voiceRepliesButton) {
-      voiceRepliesButton.setAttribute("aria-pressed", "true");
-      voiceRepliesButton.textContent = "🔊 Coral voice: On";
-    }
-    speakNextReply = true;
-    if (voiceStatus) voiceStatus.textContent = "I heard you. Speak now.";
-    voiceInputButton?.click();
-    return true;
-  } catch (error) {
-    if (wakeWordStatus) wakeWordStatus.textContent = error.message || "Could not resume after the wake phrase.";
-    return false;
-  }
-}
-
-async function syncWakeWordStatus() {
-  if (!wakeWordButton || !wakeWordStatus) return;
-  if (!nativeWakeWordAvailable()) {
-    wakeWordButton.disabled = true;
-    wakeWordButton.textContent = "Hey Buddy (Android app only)";
-    wakeWordStatus.textContent = "Background wake listening requires the updated Buddy APK.";
-    return;
-  }
-  wakeWordButton.disabled = false;
-  try {
-    const status = await BuddyWakeWord.status();
-    if (status.error) {
-      wakeWordStatus.textContent = status.error;
-    } else if (status.enabled && status.listening) {
-      wakeWordStatus.textContent = "Listening for “Hey Buddy” in the background.";
-    } else if (status.enabled) {
-      wakeWordStatus.textContent = "Hey Buddy is enabled and will resume listening.";
-    } else {
-      wakeWordStatus.textContent = "Background wake listening is off.";
-    }
-    wakeWordButton.textContent = status.enabled ? "Disable Hey Buddy" : "Enable Hey Buddy";
-    localStorage.setItem(WAKE_WORD_STORAGE_KEY, String(Boolean(status.enabled)));
-  } catch (error) {
-    wakeWordStatus.textContent = error.message || "Could not check wake-word status.";
-  }
-}
-
-if (wakeWordButton) {
-  wakeWordButton.addEventListener("click", async () => {
-    if (!nativeWakeWordAvailable()) {
-      if (wakeWordStatus) wakeWordStatus.textContent = "Install the updated Buddy Android APK to use Hey Buddy.";
-      return;
-    }
-    wakeWordButton.disabled = true;
-    try {
-      if (localStorage.getItem(WAKE_WORD_STORAGE_KEY) === "true") {
-        await BuddyWakeWord.stop();
-        localStorage.setItem(WAKE_WORD_STORAGE_KEY, "false");
-        wakeWordButton.textContent = "Enable Hey Buddy";
-        if (wakeWordStatus) wakeWordStatus.textContent = "Background wake listening is off.";
-      } else {
-        await BuddyWakeWord.start();
-        localStorage.setItem(WAKE_WORD_STORAGE_KEY, "true");
-        wakeWordButton.textContent = "Disable Hey Buddy";
-        if (wakeWordStatus) wakeWordStatus.textContent = "Listening for “Hey Buddy”. Keep the notification visible.";
-      }
-    } catch (error) {
-      if (wakeWordStatus) wakeWordStatus.textContent = error.message || "Could not change wake-word setting.";
-    } finally {
-      wakeWordButton.disabled = false;
-    }
-  });
-}
-
-function selectedVoiceLanguage() {
-  return voiceLanguageSelect?.value || "en-US";
-}
-
-// Avoid showing Coral as available when the server has no OpenAI key configured.
-async function checkCoralVoiceAvailability() {
-  if (!voiceRepliesButton) return;
-  voiceRepliesButton.disabled = true;
-  try {
-    const response = await fetch("/api/health", { cache: "no-store" });
-    const health = await response.json().catch(() => ({}));
-    const configured = response.ok && health.openaiVoiceConfigured === true;
-    voiceRepliesButton.disabled = !configured;
-    if (voiceStatus) {
-      voiceStatus.textContent = configured
-        ? "Coral voice is ready."
-        : "Coral voice is unavailable. Add OPENAI_API_KEY in Render.";
-    }
-  } catch {
-    // Keep the feature available if the health check itself is temporarily unreachable.
-    voiceRepliesButton.disabled = false;
-  }
-}
-void checkCoralVoiceAvailability();
-
-if (voiceRepliesButton) {
-  voiceRepliesButton.addEventListener("click", () => {
-    if (!voiceRepliesEnabled) void unlockSpeechAudio().catch(error => console.warn("Audio unlock failed:", error));
-    voiceRepliesEnabled = !voiceRepliesEnabled;
-    voiceRepliesButton.setAttribute("aria-pressed", String(voiceRepliesEnabled));
-    voiceRepliesButton.textContent = voiceRepliesEnabled
-      ? "🔊 Coral voice: On"
-      : "🔊 Coral voice: Off";
-    if (!voiceRepliesEnabled) stopSpeaking();
-    if (voiceStatus) voiceStatus.textContent = voiceRepliesEnabled
-      ? "Buddy will speak using OpenAI Coral."
-      : "Spoken replies are off.";
-  });
-}
-
-if (stopSpeakingButton) {
-  stopSpeakingButton.addEventListener("click", () => {
-    stopSpeaking();
-    if (voiceStatus) voiceStatus.textContent = "Buddy stopped speaking.";
-  });
-}
-
-if (voiceInputButton) {
-  voiceInputButton.addEventListener("click", async () => {
-    void unlockSpeechAudio().catch(error => console.warn("Audio unlock failed:", error));
-    if (activeController) return;
-    voiceInputButton.disabled = true;
-    await pauseWakeWord();
-    voiceInputButton.textContent = "Listening...";
-    if (voiceStatus) voiceStatus.textContent = "Speak now. Buddy is listening.";
-    try {
-      const transcript = await listenForSpeech(selectedVoiceLanguage());
-      input.value = transcript;
-      speakNextReply = true;
-      if (voiceStatus) voiceStatus.textContent = "You said: " + transcript;
-      form.requestSubmit();
-    } catch (error) {
-      speakNextReply = false;
-      if (voiceStatus) voiceStatus.textContent = error.message || "Voice input failed.";
-      await resumeWakeWordIfEnabled();
-    } finally {
-      voiceInputButton.disabled = false;
-      voiceInputButton.textContent = "🎙️ Talk";
-    }
-  });
-}
 
 // =====================================
 // STOP GENERATION BUTTON
@@ -219,7 +32,6 @@ stopButton.title = "Stop generating response";
 send.insertAdjacentElement("afterend", stopButton);
 
 stopButton.addEventListener("click", () => {
-  stopSpeaking();
   if (activeController && !activeController.signal.aborted) {
     stopButton.disabled = true;
     stopButton.textContent = "Stopping...";
@@ -531,32 +343,6 @@ if (localStorage.getItem(TOKEN_STORAGE_KEY)) {
   loadConversationHistory(true);
 }
 
-// Keep the foreground service state in sync and resume after Android returns to Buddy.
-if (Capacitor.isNativePlatform()) {
-  (async () => {
-    const woke = await handlePendingWake();
-    await syncWakeWordStatus();
-    if (!woke && localStorage.getItem(WAKE_WORD_STORAGE_KEY) === "true") {
-      await resumeWakeWordIfEnabled();
-    }
-  })();
-  App.addListener("appStateChange", async ({ isActive }) => {
-    if (!isActive) return;
-    const woke = await handlePendingWake();
-    await syncWakeWordStatus();
-    if (!woke && localStorage.getItem(WAKE_WORD_STORAGE_KEY) === "true") {
-      await resumeWakeWordIfEnabled();
-    }
-  });
-  // Also catch the wake event when Buddy is already visible and Android
-  // does not emit a background-to-foreground lifecycle transition.
-  window.setInterval(() => {
-    if (document.visibilityState === "visible") {
-      void handlePendingWake();
-    }
-  }, 900);
-}
-
 // =====================================
 // READ STREAMING RESPONSE
 // =====================================
@@ -794,7 +580,6 @@ form.addEventListener("submit", async (event) => {
   activeController = controller;
 
   try {
-    await pauseWakeWord();
     const token = getAccessToken();
 
     const response = await fetch("/api/chat", {
@@ -807,8 +592,7 @@ form.addEventListener("submit", async (event) => {
 
       body: JSON.stringify({
         message,
-        history: history.slice(-MAX_HISTORY),
-        voiceMode: voiceRepliesEnabled || speakNextReply
+        history: history.slice(-MAX_HISTORY)
       }),
 
       signal: controller.signal
@@ -870,15 +654,7 @@ form.addEventListener("submit", async (event) => {
       );
     }
 
-    if (voiceRepliesEnabled || speakNextReply) {
-      try {
-        await speakText(reply, selectedVoiceLanguage());
-        if (voiceStatus) voiceStatus.textContent = "Buddy finished speaking.";
-      } catch (error) {
-        if (voiceStatus) voiceStatus.textContent = error.message || "Spoken replies are unavailable.";
-      }
-    }
-    speakNextReply = false;
+
 
   } catch (error) {
     // Handle intentional stopping
@@ -911,7 +687,6 @@ form.addEventListener("submit", async (event) => {
 
   } finally {
     activeController = null;
-    speakNextReply = false;
 
     send.disabled = false;
     send.textContent = "Send";
@@ -921,7 +696,6 @@ form.addEventListener("submit", async (event) => {
     stopButton.textContent = "Stop";
 
     input.focus();
-    await resumeWakeWordIfEnabled();
   }
 });
 

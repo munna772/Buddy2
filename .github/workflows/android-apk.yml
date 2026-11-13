@@ -19,11 +19,6 @@ jobs:
         with:
           node-version: 22
 
-      - name: Set up Python
-        uses: actions/setup-python@v7.1.0
-        with:
-          python-version: '3.11'
-
       - name: Set up Java
         uses: actions/setup-java@v6.2.0
         with:
@@ -35,38 +30,6 @@ jobs:
 
       - name: Generate Android project
         run: npx cap add android
-
-      - name: Download sherpa-onnx Android library
-        run: |
-          mkdir -p android/app/libs
-          curl --fail --location --retry 3 \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-2.0.1.aar" \
-            --output android/app/libs/sherpa-onnx-2.0.1.aar
-          test -s android/app/libs/sherpa-onnx-2.0.1.aar
-          ls -lh android/app/libs/sherpa-onnx-2.0.1.aar
-
-      - name: Prepare native Hey Buddy wake-word engine
-        run: |
-          python -m pip install --disable-pip-version-check sentencepiece==0.2.3
-          MODEL_DIR="sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
-          curl --fail --location --retry 3 \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/${MODEL_DIR}.tar.bz2" \
-            --output /tmp/buddy-kws-model.tar.bz2
-          mkdir -p /tmp/buddy-kws-model
-          tar -xjf /tmp/buddy-kws-model.tar.bz2 -C /tmp/buddy-kws-model
-          SOURCE="/tmp/buddy-kws-model/${MODEL_DIR}"
-          DEST="android/app/src/main/assets/${MODEL_DIR}"
-          mkdir -p "${DEST}"
-          cp "${SOURCE}/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx" "${DEST}/"
-          cp "${SOURCE}/decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx" "${DEST}/"
-          cp "${SOURCE}/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx" "${DEST}/"
-          cp "${SOURCE}/tokens.txt" "${DEST}/"
-          python scripts/make-wake-keywords.py "${SOURCE}/bpe.model" "${DEST}/keywords.txt"
-          test -s "${DEST}/keywords.txt"
-          ls -lh "${DEST}"
-
-      - name: Add wake-word native Android components
-        run: python scripts/prepare-android-wakeword.py
 
       - name: Sync Buddy app and native plugins
         run: npx cap sync android

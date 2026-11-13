@@ -89,39 +89,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 }
 .buddy { align-self: flex-start; color: #e5eaf1; background: #1b2431; border: 1px solid #273241; border-bottom-left-radius: 5px; }
 .user { align-self: flex-end; color: #10170b; background: var(--accent); border-bottom-right-radius: 5px; }
-.voice-dock { flex-shrink: 0; margin: 0 16px 9px; border: 1px solid var(--line); border-radius: 13px; background: #111720; }
-.voice-dock summary {
-  min-height: 43px; display: flex; align-items: center; gap: 9px; padding: 0 13px;
-  list-style: none; cursor: pointer; color: #dce3eb; font-size: 12px; font-weight: 650;
-}
-.voice-dock summary::-webkit-details-marker { display: none; }
-.voice-summary-icon { color: var(--accent); font-size: 18px; }
-.voice-dock summary small { margin-left: auto; color: var(--muted); font-size: 10px; font-weight: 450; }
-.chevron { color: var(--muted); font-size: 17px; transition: transform .18s; }
-.voice-dock[open] .chevron { transform: rotate(180deg); }
-.voice-controls { display: grid; grid-template-columns: auto minmax(100px, 150px); gap: 8px 10px; align-items: center; padding: 0 12px 12px; }
-.voice-controls label { color: var(--muted); font-size: 11px; }
-.voice-controls select {
-  width: 100%; min-height: 34px; padding: 5px 9px; border: 1px solid #303b49;
-  border-radius: 9px; background: #0d1219; color: var(--text); font-size: 12px;
-}
-.voice-buttons { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 7px; }
-.voice-buttons button { min-height: 34px; padding: 6px 11px; border-radius: 9px; font-size: 11px; font-weight: 650; }
-.talk-button { background: var(--accent); color: var(--accent-ink); }
-.secondary-button { background: #29364a; color: #e1e9f5; }
-.quiet-button { background: transparent; color: #aeb9c8; border: 1px solid #303b49; }
-#voice-status { grid-column: 1 / -1; min-width: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
-.wake-word-controls {
-  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
-  gap: 8px; padding: 9px; border: 1px solid #283342; border-radius: 10px;
-  background: #0d131b;
-}
-.wake-word-controls button {
-  min-height: 34px; padding: 6px 11px; border: 1px solid #3a4b62;
-  border-radius: 9px; background: #29364a; color: #e1e9f5;
-  font-size: 11px; font-weight: 700;
-}
-#wake-word-status { flex: 1 1 180px; min-width: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 #chat-form { flex-shrink: 0; padding: 5px 16px 0; }
 .composer {
   display: flex; align-items: center; gap: 8px; padding: 6px 7px 6px 14px;
@@ -153,7 +120,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .chat { padding: 14px 14px 18px; }
   .welcome { padding: 12px 8px 8px; }
   .bubble { max-width: 90%; font-size: 13px; }
-  .voice-dock { margin: 0 10px 7px; }
   #chat-form { padding: 4px 10px 0; }
   .composer { border-radius: 14px; }
   .note { padding-bottom: max(9px, env(safe-area-inset-bottom)); }
