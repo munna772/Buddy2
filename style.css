@@ -328,6 +328,7 @@ button:focus-visible, input:focus-visible {
 }
 .composer input::placeholder { color: #8194aa; }
 .message-count { color: #6e8198; font-size: 9px; white-space: nowrap; }
+.composer button[hidden] { display: none; }
 .composer button {
   min-width: 88px;
   min-height: 46px;
