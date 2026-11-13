@@ -1,74 +1,75 @@
-# Buddy AI — Gemini-powered chat backend
+# Buddy AI
 
-Buddy is a private, single-user chat app backed by a Node.js/Express server and Google's Gemini API. The browser sends requests to this server; the Gemini API key and Supabase secret key must remain on the server.
+Buddy is a private, single-user, text-only AI assistant. It uses a Node.js/Express backend, Gemini for streamed replies, and Supabase for saved conversations and personal memories. The web interface is also wrapped into an Android debug APK by GitHub Actions.
 
-## Security first
+## Features
 
-- Never commit `.env`, real API keys, Supabase secret keys, or the Buddy access token.
-- Set secrets as private environment variables in your hosting provider's dashboard.
-- The browser stores the Buddy access token in `localStorage`. This is acceptable only for private testing on a device you control; it is not suitable for distributing a public APK or offering a public multi-user service.
-- Keep this repository private. Making it public exposes the source code to everyone.
-- Do not use real sensitive personal information when testing.
+- Streaming text conversations in English, Bangla, and Arabic.
+- Primary and two backup Gemini API keys.
+- Persistent conversation history and personal memories, including meaningful emotional context.
+- Edit and delete controls for saved personal memories.
+- Responsive, high-contrast interface for phones and desktops.
+- Service-worker caching for public app files only. Chat, history, and memory API responses are never cached.
+- Android APK build as a downloadable GitHub Actions artifact.
+
+## Security
+
+- Never commit `.env`, API keys, Supabase secret keys, or the Buddy access token.
+- Keep Gemini and Supabase credentials only in the Render service's private environment variables.
+- The app stores the single-user Buddy access token in this device's localStorage. Keep the device protected and use a long random token. This is not a multi-user authentication system.
+- The Android APK contains the web app shell and the URL of the Buddy backend. It must never contain Gemini or Supabase secret keys.
+- The GitHub repository is public, so assume all source code and committed files are visible to everyone.
+- Revoke and replace any credential that has ever been pasted into a public file, issue, or chat.
+- Do not use real sensitive information when testing.
 
 ## Requirements
 
 - Node.js 22.x
-- A Gemini API key from Google AI Studio
-- A hosting provider that can run a persistent Node.js web service
-- Supabase project and a `memories` table if persistent conversation and extracted-fact memory is wanted
+- A Gemini API key
+- A Render web service (or another host that runs a persistent Node.js process)
+- A Supabase project with a `memories` table for persistent history and memory
 
 ## Environment variables
 
-Configure these in your hosting provider's private environment-variable settings:
+Set these in the hosting provider's private environment settings:
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | Yes | Gemini API key |
-| `GEMINI_MODEL` | No | Gemini model name; defaults to `gemini-3.8-flash` in the current server code |
-| `OPENAI_API_KEY` | No | OpenAI API key used only for Coral text-to-speech; Gemini remains the chat model |
-| `BUDDY_ACCESS_TOKEN` | Yes | Private app access token; must contain at least 32 bytes |
-| `SUPABASE_URL` | No | Supabase project URL; enables persistent memory when used with the secret key |
-| `SUPABASE_SECRET_KEY` | No | Supabase secret key; keep it server-side only |
+| `GEMINI_API_KEY` | Yes | Primary Gemini API key |
+| `BACKUP_GEMINI_API_KEY` | No | First backup Gemini key |
+| `BACKUP_GEMINI_API_KEY_2` | No | Second backup Gemini key |
+| `GEMINI_MODEL` | No | Gemini model name; defaults to `gemini-3.8-flash` in server code |
+| `BUDDY_ACCESS_TOKEN` | Yes | Private app access token; minimum 32 bytes |
+| `SUPABASE_URL` | No | Supabase project URL |
+| `SUPABASE_SECRET_KEY` | No | Supabase secret key; keep server-side only |
 | `PORT` | No | Hosting port; defaults to `3000` |
 
-If Supabase is not configured, the chat server can run without persistent memory. Configure both `SUPABASE_URL` and `SUPABASE_SECRET_KEY` to enable the database features.
+Both Supabase variables must be configured to enable saved conversations and memories. Without them, Buddy can still chat, but cannot promise durable memory or history.
 
-`.env.example` is a placeholder template. Copy it to `.env` for local development and replace the placeholders locally. Never commit the real `.env` file.
+`.env.example` contains placeholders only. Copy it to `.env` for local development, replace the placeholders on your own device, and never commit the real file.
 
 ## Run locally
 
-1. Install Node.js 18 or newer.
-2. Download the project.
-3. Install dependencies:
+1. Install Node.js 22.x.
+2. Clone the repository and run `npm install`.
+3. Copy `.env.example` to `.env` and set your private values.
+4. Run `npm start`.
+5. Open `http://localhost:3000`.
 
-   ```bash
-   npm install
-   ```
+## Deploy the backend
 
-4. Copy `.env.example` to `.env` and fill in your real values locally.
-5. Start the server:
+For a Render Node web service, use:
 
-   ```bash
-   npm start
-   ```
-
-6. Open `http://localhost:3000`.
-
-## Deploy
-
-For a Node.js web service:
-
-- Build/install command: `npm install`
+- Build command: `npm install`
 - Start command: `npm start`
-- Add the environment variables listed above in the host dashboard.
-- Do not upload or paste secret values into GitHub files.
-- After deployment, check `/api/health`. It reports whether Gemini, database, and access protection are configured; it does not reveal secret values.
+- Configure the environment variables above in Render's private Environment settings.
+- Check `/api/health` after deployment. It reports whether Gemini, database, and access protection are configured without returning secret values.
 
-The API is rate-limited. Gemini quotas and model availability depend on the Google AI Studio account and can change.
+The API is rate-limited. Gemini quotas and model availability depend on the Google AI account and can change.
 
 ## Chat API
 
-The frontend sends a JSON request to `POST /api/chat` with a Bearer access token:
+The frontend sends `POST /api/chat` with a Bearer token and JSON request body:
 
 ```json
 {
@@ -80,22 +81,22 @@ The frontend sends a JSON request to `POST /api/chat` with a Bearer access token
 }
 ```
 
-The successful response is a Server-Sent Events (SSE) stream, not a single JSON reply. Text arrives in events shaped like:
+Successful replies are sent as Server-Sent Events (SSE). Each text event contains JSON such as `data: {"text":"Hello"}`; the final event is `data: [DONE]`. Errors are emitted as JSON `error` events if streaming has already started.
 
-```text
-data: {"text":"Hello"}
+Conversation records are stored in a versioned `CHAT_V1:` JSON format so message text containing legacy separators does not break history restoration. Older `User: ... / Buddy: ...` records remain readable.
 
-data: {"text":"! How can I help?"}
+## Build and download the Android APK
 
-data: [DONE]
-```
+GitHub Actions builds a debug APK on every push to `main`, and can also be started manually:
 
-An error event may contain a JSON `error` field. The frontend reads the stream progressively and builds Buddy's reply.
+1. Open the repository's **Actions** tab.
+2. Select **Build Buddy Android APK**.
+3. Open the latest successful run.
+4. Under **Artifacts**, download `Buddy-AI-Android-debug`.
+5. Extract the ZIP and install `app-debug.apk` on the Android device.
 
-## Install Buddy on Android
+The debug APK is for personal testing. It is not a Play Store release or a production-signed APK. The Android wrapper loads the existing HTTPS Buddy backend, so the Render service and its private environment variables must remain configured.
 
-Buddy is provided as an installable Progressive Web App (PWA). On Android, open the HTTPS site in Chrome, open the browser menu, and choose **Install app** or **Add to Home screen**. The installed app opens in a standalone window. The service worker caches only the public app shell; `/api/` responses, chat, and personal memories are never cached for offline use.
+## PWA installation
 
-This is an installable web app, not a signed native APK. A native APK requires a separate Android wrapper build and signing process. Do not distribute the current shared access-token setup as a public or multi-user app. The browser stores the Buddy access token in localStorage, so install it only on a device you control. Never embed the Gemini API key or Supabase secret key in an APK.
-
-The native Buddy APK build also includes an optional **Hey Buddy** background wake-word service. It uses the sherpa-onnx English keyword-spotting model locally on the device; microphone audio for wake-word detection is not sent to Gemini. The feature must be enabled manually inside the app, keeps an Android foreground-service notification visible, and requires microphone permission. When the phrase is detected, Buddy opens and uses Android speech recognition for the actual request; internet is still required for Gemini replies. Android battery-management settings can affect whether the service stays alive, and background activity-launch rules vary by Android version. The wake-word feature is not available in the browser/PWA.
+On Android, open the HTTPS Buddy site in Chrome and choose **Install app** or **Add to Home screen** from the browser menu. The service worker caches only the public app shell. Chat, history, and personal memories need an internet connection and are never stored in the offline cache.
