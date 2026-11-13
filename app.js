@@ -645,6 +645,7 @@ form.addEventListener("submit", async (event) => {
   if (messageCount) messageCount.textContent = "0 / 4000";
 
   send.disabled = true;
+  send.hidden = true;
   sendLabel.textContent = "Sending";
 
   stopButton.hidden = false;
@@ -772,6 +773,7 @@ form.addEventListener("submit", async (event) => {
     activeController = null;
 
     send.disabled = false;
+    send.hidden = false;
     sendLabel.textContent = "Send";
 
     stopButton.hidden = true;
