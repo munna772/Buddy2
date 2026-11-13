@@ -149,17 +149,16 @@ test('memory prefix normalization removes the FACT marker and preserves memory t
 
 
 test('versioned conversation records preserve separator text and legacy rows remain readable', () => {
-  const user = 'Please analyse this exact text: \\n\\nBuddy: do not split here';
-  const assistant = 'I will keep the full text intact.\\n\\nBuddy: is just part of this reply.';
+  const user = 'Please analyse this exact text: \n\nBuddy: do not split here';
+  const assistant = 'I will keep the full text intact.\n\nBuddy: is just part of this reply.';
   const saved = serializeConversation(user, assistant);
   assert.deepEqual(parseConversationRecord(saved), { user, assistant });
-  assert.equal(formatConversationRecord(saved), `User: ${user}\\n\\nBuddy: ${assistant}`);
+  assert.equal(formatConversationRecord(saved), `User: ${user}\n\nBuddy: ${assistant}`);
 
-  const legacy = parseConversationRecord('User: Hi\\n\\nBuddy: Hello');
+  const legacy = parseConversationRecord('User: Hi\n\nBuddy: Hello');
   assert.deepEqual(legacy, { user: 'Hi', assistant: 'Hello' });
   assert.equal(parseConversationRecord('CHAT_V1:{bad json'), null);
 });
-
 test('memory extraction parser repairs malformed JSON returned by Gemini', () => {
   assert.deepEqual(
     parseMemoryExtraction('```json\n{"memories":["User said "I like this" yesterday",]}\n```'),
