@@ -251,6 +251,15 @@ test('serves the refreshed accessible text-only Buddy interface', async () => {
   assert.match(appScript, /function startNewChat\(\)/);
   assert.match(appScript, /function openConversation\(conversationId\)/);
   assert.match(appScript, /AI not configured/);
+  assert.match(appScript, /function scheduleRender\(\)/);
+  assert.match(appScript, /requestAnimationFrame\(flush\)/);
+
+  const serverScript = readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(serverScript, /MEMORY_CACHE_TTL_MS = 60 \* 1000/);
+  assert.match(serverScript, /FACT_CHAR_LIMIT = 5000/);
+  assert.match(serverScript, /Chat context ready in/);
+  assert.match(serverScript, /setImmediate\(\(\) =>/);
+  assert.match(serverScript, /Background conversation processing failed/);
 
   const stylesheet = await (await fetch(`${baseUrl}/style.css`)).text();
   assert.match(stylesheet, /--accent: #69f1df/);
