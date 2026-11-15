@@ -75,7 +75,7 @@ function serializeConversation(user, assistant, conversationId = null) {
 function formatConversationRecord(content) {
   const record = parseConversationRecord(content);
   return record
-    ? `User: ${record.user}\\n\\nBuddy: ${record.assistant}`
+    ? `User: ${record.user}\n\nBuddy: ${record.assistant}`
     : String(content || '');
 }
 
