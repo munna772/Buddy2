@@ -179,10 +179,17 @@ test('serves the refreshed accessible text-only Buddy interface', async () => {
   assert.match(html, /id="access-dialog"/);
   assert.match(html, /id="connection-status"/);
   assert.match(html, /data-prompt=/);
+  assert.doesNotMatch(html, /Hey, I'm Buddy\. What's on your mind\?/);
   assert.doesNotMatch(html, /voice-dock|voice-language|voice-input|wake-word-toggle|Coral voice|^ils>$/im);
-  assert.doesNotMatch(readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8'), /webkitSpeechRecognition|speechSynthesis|getUserMedia/i);
+  const appScript = readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.doesNotMatch(appScript, /webkitSpeechRecognition|speechSynthesis|getUserMedia/i);
+  assert.match(appScript, /let historyLoading = false/);
+  assert.match(appScript, /Finish the current reply before loading history/);
+  assert.match(appScript, /previous conversations are still loading/);
+  assert.match(appScript, /AI not configured/);
 
   const stylesheet = await (await fetch(`${baseUrl}/style.css`)).text();
   assert.match(stylesheet, /--accent: #69f1df/);
   assert.match(stylesheet, /\.connection-pill\[data-state="online"\]/);
+  assert.match(stylesheet, /\.connection-pill\[data-state="degraded"\]/);
 });
