@@ -430,7 +430,7 @@ function openConversation(conversationId) {
 }
 
 function startNewChat() {
-  if (activeController) {
+  if (activeController || historyLoading) {
     if (historyStatus) historyStatus.textContent = "Wait for Buddy's reply to finish before starting a new chat.";
     return;
   }
@@ -473,17 +473,19 @@ async function loadConversationList(silent = false) {
     savedConversations = Array.isArray(data.conversations) ? data.conversations : [];
     renderConversationList();
 
-    if (savedConversations.length) {
-      const selected = savedConversations.find(item => item.id === activeConversationId)
-        || savedConversations[0];
+    const selected = activeConversationId
+      ? savedConversations.find(item => item.id === activeConversationId)
+      : savedConversations[0];
+
+    if (selected) {
       openConversation(selected.id);
       if (!silent) historyStatus.textContent = `Loaded ${savedConversations.length} saved chat${savedConversations.length === 1 ? "" : "s"}.`;
     } else {
-      activeConversationId = activeConversationId || createConversationId();
-      localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
       history.length = 0;
       showNewChatWelcome();
-      if (!silent) historyStatus.textContent = "No saved chats yet. Start a new conversation.";
+      if (!silent) historyStatus.textContent = savedConversations.length
+        ? "This is a new chat. Your other conversations are in the list."
+        : "No saved chats yet. Start a new conversation.";
     }
   } catch (error) {
     if (!silent) historyStatus.textContent = error.message || "Could not load your chats.";
@@ -510,8 +512,6 @@ if (toggleChatsButton && chatLayout) {
 if (localStorage.getItem(TOKEN_STORAGE_KEY)) {
   loadConversationList(true);
 } else {
-  activeConversationId = activeConversationId || createConversationId();
-  localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
   renderConversationList();
 }
 // READ STREAMING RESPONSE
@@ -727,6 +727,10 @@ form.addEventListener("submit", async (event) => {
   const message = input.value.trim();
 
   if (!message) return;
+  if (!activeConversationId) {
+    activeConversationId = createConversationId();
+    localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
+  }
 
   if (message.length > MAX_MESSAGE_LENGTH) {
     addBubble(
