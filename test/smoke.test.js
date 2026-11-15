@@ -120,6 +120,31 @@ test('valid access token reaches the protected route without requiring a live da
   assert.equal(response.headers.get('cache-control'), 'no-store');
 });
 
+test('chat reports missing Gemini setup honestly and never claims an unsaved memory was saved', async () => {
+  const headers = {
+    Authorization: `Bearer ${ACCESS_TOKEN}`,
+    'Content-Type': 'application/json'
+  };
+
+  const normalReply = await fetch(`${baseUrl}/api/chat`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message: 'Hello Buddy', history: [] })
+  });
+  assert.equal(normalReply.status, 503);
+  const normalError = await normalReply.json();
+  assert.match(normalError.error, /no Gemini API key configured/i);
+
+  const memoryRequest = await fetch(`${baseUrl}/api/chat`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message: 'Please remember that my cat is Meamy', history: [] })
+  });
+  assert.equal(memoryRequest.status, 503);
+  const memoryError = await memoryRequest.json();
+  assert.match(memoryError.error, /could not confirm that memory was saved/i);
+});
+
 test('serves the installable app manifest and service worker', async () => {
   const manifestResponse = await fetch(`${baseUrl}/manifest.webmanifest`);
   assert.equal(manifestResponse.status, 200);
