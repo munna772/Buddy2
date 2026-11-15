@@ -23,9 +23,35 @@ source = source.replace(
 );
 source = source.replace(/\btar_1\.default\.extract\(/g, 'tar_1.extract(');
 
-if (source === original || /(?:tar_1\.default|tar)\.extract\(/.test(source)) {
+const hasNamedImport =
+  /import\s*\{\s*extract\s*\}\s*from\s*(['"])tar\1/.test(source) &&
+  /\bextract\s*\(/.test(source);
+
+const commonJsTarImport = source.match(
+  /\b(?:const|let|var)\s+(tar_1|tar)\s*=\s*require\((['"])tar\2\)/
+);
+const hasCompatibleCommonJsImport = Boolean(
+  commonJsTarImport &&
+  new RegExp(`\\\\b${commonJsTarImport[1]}\\\\.extract\\\\s*\\\\(`).test(source)
+);
+
+const stillUsesDefaultImport = /import\s+tar\s+from\s+(['"])tar\1/.test(source);
+const stillUsesDefaultInterop = /__importDefault\(require\((['"])tar\1\)\)/.test(source);
+const stillUsesDefaultExtract = /\btar_1\.default\.extract\s*\(/.test(source) ||
+  (stillUsesDefaultImport && /\btar\.extract\s*\(/.test(source));
+
+if (
+  stillUsesDefaultImport ||
+  stillUsesDefaultInterop ||
+  stillUsesDefaultExtract ||
+  (!hasNamedImport && !hasCompatibleCommonJsImport)
+) {
   throw new Error('Could not safely patch the installed Capacitor tar import.');
 }
 
-await writeFile(templatePath, source, 'utf8');
-console.log('Patched Capacitor CLI template extraction to use tar.extract safely.');
+if (source !== original) {
+  await writeFile(templatePath, source, 'utf8');
+  console.log('Patched Capacitor CLI template extraction to use tar.extract safely.');
+} else {
+  console.log('Capacitor CLI template extraction already uses the compatible tar API.');
+}
