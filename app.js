@@ -25,6 +25,7 @@ const MAX_HISTORY = 12;
 const TOKEN_STORAGE_KEY = "buddy_access_token";
 
 let activeController = null;
+let historyLoading = false;
 
 // =====================================
 // STOP GENERATION BUTTON
@@ -350,6 +351,13 @@ function parseSavedConversation(content) {
 async function loadConversationHistory(silent = false) {
   if (!historyButton || !historyStatus) return;
 
+  if (activeController) {
+    if (!silent) historyStatus.textContent = "Finish the current reply before loading history.";
+    return;
+  }
+  if (historyLoading) return;
+
+  historyLoading = true;
   historyButton.disabled = true;
   if (!silent) historyStatus.textContent = "Loading previous conversations...";
 
@@ -407,6 +415,7 @@ async function loadConversationHistory(silent = false) {
       historyStatus.textContent = error.message || "Could not load previous conversations.";
     }
   } finally {
+    historyLoading = false;
     historyButton.disabled = false;
   }
 }
@@ -623,8 +632,13 @@ function getFriendlyChatError(error) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  // Prevent another request while Buddy is responding.
+  // Prevent requests that could race with restored history or another reply.
   if (activeController) return;
+  if (historyLoading) {
+    if (historyStatus) historyStatus.textContent = "Your previous conversations are still loading. Please send again in a moment.";
+    input.focus();
+    return;
+  }
 
   const message = input.value.trim();
 
@@ -719,7 +733,7 @@ form.addEventListener("submit", async (event) => {
 
     // Receive response progressively
     const reply = await readStream(response, waiting);
-    setConnectionState("online", "Service online");
+    checkBuddyConnection();
 
     // Save completed conversation
     history.push(
@@ -827,7 +841,13 @@ async function checkBuddyConnection() {
       throw new Error("Buddy service is not ready.");
     }
 
-    setConnectionState("online", "Service online");
+    if (data.geminiConfigured !== true) {
+      setConnectionState("degraded", "AI not configured");
+    } else if (data.databaseConfigured !== true) {
+      setConnectionState("degraded", "Chat online · Memory off");
+    } else {
+      setConnectionState("online", "Service online");
+    }
   } catch {
     setConnectionState("offline", "Service unavailable");
   }
