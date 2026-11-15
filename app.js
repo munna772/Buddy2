@@ -535,6 +535,24 @@ async function readStream(response, bubble) {
   let dataLines = [];
   let reply = "";
   let completed = false;
+  let renderScheduled = false;
+
+  function scheduleRender() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+
+    const flush = () => {
+      renderScheduled = false;
+      bubble.textContent = reply;
+      chat.scrollTop = chat.scrollHeight;
+    };
+
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(flush);
+    } else {
+      setTimeout(flush, 16);
+    }
+  }
 
   function dispatchEvent() {
     if (!dataLines.length) return;
@@ -570,9 +588,7 @@ async function readStream(response, bubble) {
       parsed.text.length > 0
     ) {
       reply += parsed.text;
-
-      bubble.textContent = reply;
-      chat.scrollTop = chat.scrollHeight;
+      scheduleRender();
     }
   }
 
@@ -662,6 +678,10 @@ async function readStream(response, bubble) {
     if (dataLines.length) {
       dispatchEvent();
     }
+
+    // Flush any queued visual update before marking the stream complete.
+    bubble.textContent = reply;
+    chat.scrollTop = chat.scrollHeight;
 
     if (!completed) {
       throw new Error(
