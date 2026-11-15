@@ -222,10 +222,10 @@ test('Gemini stream parser preserves text and detects MAX_TOKENS finish reason',
   const stream = new ReadableStream({
     start(controller) {
       controller.enqueue(encoder.encode(
-        'data: {"candidates":[{"content":{"parts":[{"text":"This is only the beginning."}]}}]}\\r\\n\\r\\n'
+        'data: {"candidates":[{"content":{"parts":[{"text":"This is only the beginning."}]}}]}\r\n\r\n'
       ));
       controller.enqueue(encoder.encode(
-        'data: {"candidates":[{"finishReason":"MAX_TOKENS","finishMessage":"Output token limit reached."}]}\\r\\n\\r\\n'
+        'data: {"candidates":[{"finishReason":"MAX_TOKENS","finishMessage":"Output token limit reached."}]}\r\n\r\n'
       ));
       controller.close();
     }
@@ -242,9 +242,9 @@ test('Gemini stream parser preserves text and detects MAX_TOKENS finish reason',
 test('Gemini stream parser handles chunk-split SSE boundaries and natural STOP finish', async () => {
   const encoder = new TextEncoder();
   const chunks = [
-    'data: {"candidates":[{"content":{"parts":[{"text":"Complete"}]}}]}\\r',
-    '\\n\\r',
-    '\\ndata: {"candidates":[{"finishReason":"STOP"}]}\\n\\n'
+    'data: {"candidates":[{"content":{"parts":[{"text":"Complete"}]}}]}\r',
+    '\n\r',
+    '\ndata: {"candidates":[{"finishReason":"STOP"}]}\n\n'
   ];
   const stream = new ReadableStream({
     start(controller) {
