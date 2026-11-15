@@ -448,6 +448,10 @@ function startNewChat() {
 
 async function loadConversationList(silent = false) {
   if (!historyButton || !historyStatus || historyLoading) return;
+  if (activeController) {
+    if (!silent) historyStatus.textContent = "Finish the current reply before refreshing chats.";
+    return;
+  }
 
   historyLoading = true;
   historyButton.disabled = true;
