@@ -46,6 +46,7 @@ if (
   stillUsesDefaultExtract ||
   (!hasNamedImport && !hasCompatibleCommonJsImport)
 ) {
+  console.error('Installed Capacitor template.js source for diagnosis:', source);
   throw new Error('Could not safely patch the installed Capacitor tar import.');
 }
 
