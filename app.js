@@ -731,7 +731,9 @@ form.addEventListener("submit", async (event) => {
   const message = input.value.trim();
 
   if (!message) return;
-  if (!activeConversationId) {
+  if (!activeConversationId || activeConversationId === "legacy-history") {
+    // Legacy rows had no thread ID. Continue them in a new thread rather
+    // than merging new messages into the read-only legacy archive group.
     activeConversationId = createConversationId();
     localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
   }
