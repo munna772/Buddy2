@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const { stripFactPrefix, parseMemoryExtraction } = require('../memory-utils');
-const { parseConversationRecord, serializeConversation, formatConversationRecord } = require('../conversation-utils');
+const { parseConversationRecord, serializeConversation, formatConversationRecord, groupConversationRows } = require('../conversation-utils');
 const { createServer } = require('node:net');
 const { readFileSync } = require('node:fs');
 const { after, before, test } = require('node:test');
@@ -177,13 +177,45 @@ test('versioned conversation records preserve separator text and legacy rows rem
   const user = 'Please analyse this exact text: \n\nBuddy: do not split here';
   const assistant = 'I will keep the full text intact.\n\nBuddy: is just part of this reply.';
   const saved = serializeConversation(user, assistant);
-  assert.deepEqual(parseConversationRecord(saved), { user, assistant });
+  assert.deepEqual(parseConversationRecord(saved), { user, assistant, conversationId: null });
   assert.equal(formatConversationRecord(saved), `User: ${user}\n\nBuddy: ${assistant}`);
 
   const legacy = parseConversationRecord('User: Hi\n\nBuddy: Hello');
-  assert.deepEqual(legacy, { user: 'Hi', assistant: 'Hello' });
+  assert.deepEqual(legacy, { user: 'Hi', assistant: 'Hello', conversationId: null });
   assert.equal(parseConversationRecord('CHAT_V1:{bad json'), null);
 });
+
+test('versioned chat threads group turns separately and keep legacy chats accessible', () => {
+  const rows = [
+    { id: 'row-old-2', created_at: '2026-11-14T10:02:00Z', content: serializeConversation('Second old turn', 'Old reply 2') },
+    { id: 'row-new-2', created_at: '2026-11-15T10:02:00Z', content: serializeConversation('Follow-up in new chat', 'New reply 2', 'chat_new_123456') },
+    { id: 'row-old-1', created_at: '2026-11-14T10:01:00Z', content: serializeConversation('First old turn', 'Old reply 1') },
+    { id: 'row-new-1', created_at: '2026-11-15T10:01:00Z', content: serializeConversation('Start separate chat', 'New reply 1', 'chat_new_123456') }
+  ];
+
+  const grouped = groupConversationRows(rows);
+  assert.equal(grouped.length, 2);
+  assert.equal(grouped[0].id, 'chat_new_123456');
+  assert.equal(grouped[0].title, 'Start separate chat');
+  assert.equal(grouped[0].messages.length, 2);
+  assert.equal(grouped[0].messages[0].userText, 'Start separate chat');
+  assert.equal(grouped[0].messages[1].userText, 'Follow-up in new chat');
+  assert.equal(grouped[1].id, 'legacy-history');
+  assert.equal(grouped[1].title, 'Earlier conversations');
+  assert.equal(grouped[1].messages.length, 2);
+});
+
+test('conversation IDs are serialized as version 2 records and malformed IDs fall back safely', () => {
+  const v2 = serializeConversation('Hello', 'Hi', 'chat_12345678');
+  assert.match(v2, /^CHAT_V2:/);
+  assert.deepEqual(parseConversationRecord(v2), {
+    user: 'Hello',
+    assistant: 'Hi',
+    conversationId: 'chat_12345678'
+  });
+  assert.match(serializeConversation('Hello', 'Hi', 'bad id'), /^CHAT_V1:/);
+});
+
 test('memory extraction parser repairs malformed JSON returned by Gemini', () => {
   assert.deepEqual(
     parseMemoryExtraction('```json\n{"memories":["User said "I like this" yesterday",]}\n```'),
