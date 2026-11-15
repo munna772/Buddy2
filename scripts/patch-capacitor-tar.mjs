@@ -32,9 +32,7 @@ const commonJsTarImport = source.match(
 );
 const hasCompatibleCommonJsImport = Boolean(
   commonJsTarImport &&
-  (commonJsTarImport[1] === 'tar_1'
-    ? /\\btar_1\\.extract\\s*\\(/.test(source)
-    : /\\btar\\.extract\\s*\\(/.test(source))
+  source.includes(`${commonJsTarImport[1]}.extract`)
 );
 
 const stillUsesDefaultImport = /import\s+tar\s+from\s+(['"])tar\1/.test(source);
