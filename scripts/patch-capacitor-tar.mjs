@@ -18,7 +18,7 @@ source = source.replace(/\bawait\s+tar\.extract\(/g, 'await extract(');
 
 // Also handle TypeScript's CommonJS output should the CLI package ship it.
 source = source.replace(
-  /((?:const|let|var)\s+tar_1\s*=\s*)__importDefault\(require\((['"])tar\2\)\)/g,
+  /((?:const|let|var)\s+tar_1\s*=\s*)(?:[\w$]+\.)?__importDefault\(require\((['"])tar\2\)\)/g,
   '$1require("tar")'
 );
 source = source.replace(/\btar_1\.default\.extract\(/g, 'tar_1.extract(');
@@ -46,7 +46,6 @@ if (
   stillUsesDefaultExtract ||
   (!hasNamedImport && !hasCompatibleCommonJsImport)
 ) {
-  console.error('Installed Capacitor template.js source for diagnosis:', source);
   throw new Error('Could not safely patch the installed Capacitor tar import.');
 }
 
