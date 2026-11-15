@@ -89,7 +89,7 @@ function openAccessDialog() {
   const entered = window.prompt("Enter your Buddy access token:");
   if (entered && new TextEncoder().encode(entered.trim()).length >= 32) {
     localStorage.setItem(TOKEN_STORAGE_KEY, entered.trim());
-    if (historyButton) loadConversationHistory(true);
+    if (historyButton) loadConversationList(true);
   } else if (entered !== null) {
     window.alert("The Buddy access token must contain at least 32 bytes.");
   }
@@ -134,7 +134,7 @@ if (accessForm && accessDialog && accessInput && accessError) {
     if (historyStatus) {
       historyStatus.textContent = "Secure access token saved on this device.";
     }
-    if (historyButton) loadConversationHistory(true);
+    if (historyButton) loadConversationList(true);
   });
 }
 
@@ -308,58 +308,150 @@ memoriesButton.addEventListener("click", async () => {
 });
 
 // =====================================
-// RESTORE SAVED CONVERSATION HISTORY
+// =====================================
+// CONVERSATION LIST AND THREAD RESTORATION
 // =====================================
 
 const historyButton = document.getElementById("load-history");
 const historyStatus = document.getElementById("history-status");
+const conversationList = document.getElementById("conversation-list");
+const newChatButton = document.getElementById("new-chat");
+const chatLayout = document.getElementById("chat-layout");
+const toggleChatsButton = document.getElementById("toggle-chats");
+const ACTIVE_CONVERSATION_KEY = "buddy_active_conversation";
+let activeConversationId = localStorage.getItem(ACTIVE_CONVERSATION_KEY) || null;
+let savedConversations = [];
 
-function parseSavedConversation(content) {
-  if (typeof content !== "string") return null;
+const welcomeTemplate = document.getElementById("welcome")?.cloneNode(true);
 
-  // Versioned JSON preserves messages even when either side contains the
-  // legacy "User:" / "Buddy:" separator text.
-  if (content.startsWith("CHAT_V1:")) {
-    try {
-      const record = JSON.parse(content.slice("CHAT_V1:".length));
-      if (
-        typeof record.user === "string" &&
-        typeof record.assistant === "string" &&
-        record.user.trim() &&
-        record.assistant.trim()
-      ) {
-        return { userText: record.user, buddyText: record.assistant };
-      }
-    } catch {
-      return null;
-    }
-  }
-
-  // Read older conversation rows saved before CHAT_V1 was introduced.
-  if (!content.startsWith("User: ")) return null;
-  const separator = "\n\nBuddy: ";
-  const separatorIndex = content.indexOf(separator);
-  if (separatorIndex < 0) return null;
-
-  const userText = content.slice(6, separatorIndex).trim();
-  const buddyText = content.slice(separatorIndex + separator.length).trim();
-  if (!userText || !buddyText) return null;
-
-  return { userText, buddyText };
+function createConversationId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `chat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
 }
 
-async function loadConversationHistory(silent = false) {
-  if (!historyButton || !historyStatus) return;
+function attachPromptButtons(root = document) {
+  root.querySelectorAll("[data-prompt]").forEach(button => {
+    if (button.dataset.promptBound === "true") return;
+    button.dataset.promptBound = "true";
+    button.addEventListener("click", () => {
+      const prompt = button.getAttribute("data-prompt");
+      if (!prompt) return;
+      input.value = prompt;
+      input.focus();
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  });
+}
 
-  if (activeController) {
-    if (!silent) historyStatus.textContent = "Finish the current reply before loading history.";
+function showNewChatWelcome() {
+  chat.replaceChildren();
+  if (welcomeTemplate) {
+    const welcome = welcomeTemplate.cloneNode(true);
+    chat.appendChild(welcome);
+    attachPromptButtons(welcome);
+  } else {
+    addBubble("Hey! I'm Buddy. What would you like to talk about?", "buddy");
+  }
+}
+
+function renderConversationList() {
+  if (!conversationList) return;
+  conversationList.replaceChildren();
+
+  if (!savedConversations.length) {
+    const empty = document.createElement("p");
+    empty.className = "conversation-empty";
+    empty.textContent = "Your new conversations will appear here.";
+    conversationList.appendChild(empty);
     return;
   }
-  if (historyLoading) return;
+
+  for (const conversation of savedConversations) {
+    const item = document.createElement("div");
+    item.className = "conversation-list-item";
+    item.setAttribute("role", "listitem");
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "conversation-item";
+    button.classList.toggle("active", conversation.id === activeConversationId);
+    button.setAttribute("aria-current", conversation.id === activeConversationId ? "page" : "false");
+
+    const title = document.createElement("span");
+    title.className = "conversation-title";
+    title.textContent = conversation.title || "New chat";
+
+    const preview = document.createElement("span");
+    preview.className = "conversation-preview";
+    const lastMessage = conversation.messages?.[conversation.messages.length - 1];
+    preview.textContent = lastMessage?.userText || "No messages";
+
+    button.append(title, preview);
+    button.addEventListener("click", () => openConversation(conversation.id));
+    item.appendChild(button);
+    conversationList.appendChild(item);
+  }
+}
+
+function openConversation(conversationId) {
+  if (activeController) {
+    if (historyStatus) historyStatus.textContent = "Finish Buddy's reply before switching chats.";
+    return;
+  }
+
+  const conversation = savedConversations.find(item => item.id === conversationId);
+  if (!conversation) return;
+
+  activeConversationId = conversation.id;
+  localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
+  history.length = 0;
+  chat.replaceChildren();
+
+  for (const message of conversation.messages || []) {
+    addBubble(message.userText, "user");
+    addBubble(message.buddyText, "buddy");
+    history.push(
+      { role: "user", text: message.userText },
+      { role: "model", text: message.buddyText }
+    );
+  }
+
+  if (history.length > MAX_HISTORY) {
+    history.splice(0, history.length - MAX_HISTORY);
+  }
+
+  if (!conversation.messages?.length) showNewChatWelcome();
+  if (historyStatus) historyStatus.textContent = "";
+  renderConversationList();
+  chat.scrollTop = chat.scrollHeight;
+  chatLayout?.classList.remove("sidebar-open");
+  toggleChatsButton?.setAttribute("aria-expanded", "false");
+  input.focus();
+}
+
+function startNewChat() {
+  if (activeController) {
+    if (historyStatus) historyStatus.textContent = "Wait for Buddy's reply to finish before starting a new chat.";
+    return;
+  }
+
+  activeConversationId = createConversationId();
+  localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
+  history.length = 0;
+  showNewChatWelcome();
+  if (historyStatus) historyStatus.textContent = "New conversation started.";
+  renderConversationList();
+  chatLayout?.classList.remove("sidebar-open");
+  toggleChatsButton?.setAttribute("aria-expanded", "false");
+  input.focus();
+}
+
+async function loadConversationList(silent = false) {
+  if (!historyButton || !historyStatus || historyLoading) return;
 
   historyLoading = true;
   historyButton.disabled = true;
-  if (!silent) historyStatus.textContent = "Loading previous conversations...";
+  if (!silent) historyStatus.textContent = "Refreshing your chats…";
 
   try {
     const token = getAccessToken();
@@ -375,45 +467,27 @@ async function loadConversationHistory(silent = false) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `Could not load history (${response.status}).`);
+      throw new Error(data.error || `Could not load chats (${response.status}).`);
     }
 
-    const conversations = Array.isArray(data.conversations)
-      ? data.conversations.slice().reverse()
-      : [];
+    savedConversations = Array.isArray(data.conversations) ? data.conversations : [];
+    renderConversationList();
 
-    const restored = conversations
-      .map(item => parseSavedConversation(item.content))
-      .filter(Boolean);
-
-    chat.replaceChildren();
-    history.length = 0;
-
-    if (!restored.length) {
-      addBubble("Hey! I'm Buddy. What would you like to talk about?", "buddy");
-      historyStatus.textContent = "No saved conversations found yet.";
-      return;
+    if (savedConversations.length) {
+      const selected = savedConversations.find(item => item.id === activeConversationId)
+        || savedConversations[0];
+      openConversation(selected.id);
+      if (!silent) historyStatus.textContent = `Loaded ${savedConversations.length} saved chat${savedConversations.length === 1 ? "" : "s"}.`;
+    } else {
+      activeConversationId = activeConversationId || createConversationId();
+      localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
+      history.length = 0;
+      showNewChatWelcome();
+      if (!silent) historyStatus.textContent = "No saved chats yet. Start a new conversation.";
     }
-
-    for (const conversation of restored) {
-      addBubble(conversation.userText, "user");
-      addBubble(conversation.buddyText, "buddy");
-      history.push(
-        { role: "user", text: conversation.userText },
-        { role: "model", text: conversation.buddyText }
-      );
-    }
-
-    if (history.length > MAX_HISTORY) {
-      history.splice(0, history.length - MAX_HISTORY);
-    }
-
-    historyStatus.textContent = `Restored ${restored.length} previous conversation${restored.length === 1 ? "" : "s"}.`;
-    chat.scrollTop = chat.scrollHeight;
   } catch (error) {
-    if (!silent) {
-      historyStatus.textContent = error.message || "Could not load previous conversations.";
-    }
+    if (!silent) historyStatus.textContent = error.message || "Could not load your chats.";
+    if (!savedConversations.length) renderConversationList();
   } finally {
     historyLoading = false;
     historyButton.disabled = false;
@@ -421,15 +495,25 @@ async function loadConversationHistory(silent = false) {
 }
 
 if (historyButton) {
-  historyButton.addEventListener("click", () => loadConversationHistory(false));
+  historyButton.addEventListener("click", () => loadConversationList(false));
+}
+if (newChatButton) newChatButton.addEventListener("click", startNewChat);
+if (toggleChatsButton && chatLayout) {
+  toggleChatsButton.addEventListener("click", () => {
+    const opening = !chatLayout.classList.contains("sidebar-open");
+    chatLayout.classList.toggle("sidebar-open", opening);
+    toggleChatsButton.setAttribute("aria-expanded", String(opening));
+  });
 }
 
-// Restore automatically when this browser already has Buddy's access token.
+// Restore the last active thread when this device already has secure access.
 if (localStorage.getItem(TOKEN_STORAGE_KEY)) {
-  loadConversationHistory(true);
+  loadConversationList(true);
+} else {
+  activeConversationId = activeConversationId || createConversationId();
+  localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
+  renderConversationList();
 }
-
-// =====================================
 // READ STREAMING RESPONSE
 // =====================================
 
@@ -686,6 +770,7 @@ form.addEventListener("submit", async (event) => {
 
       body: JSON.stringify({
         message,
+        conversationId: activeConversationId,
         history: history.slice(-MAX_HISTORY)
       }),
 
@@ -740,6 +825,24 @@ form.addEventListener("submit", async (event) => {
       { role: "user", text: message },
       { role: "model", text: reply }
     );
+
+    // Update the sidebar immediately; the server persists this turn in the background.
+    let currentConversation = savedConversations.find(item => item.id === activeConversationId);
+    if (!currentConversation) {
+      currentConversation = {
+        id: activeConversationId,
+        title: message.replace(/\\s+/g, " ").trim().slice(0, 64) || "New chat",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        messages: []
+      };
+      savedConversations.unshift(currentConversation);
+    }
+    currentConversation.messages = currentConversation.messages || [];
+    currentConversation.messages.push({ userText: message, buddyText: reply });
+    currentConversation.updated_at = new Date().toISOString();
+    savedConversations.sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+    renderConversationList();
 
     // Keep recent history
     if (history.length > MAX_HISTORY) {
@@ -861,15 +964,7 @@ if (messageCount) {
   updateMessageCount();
 }
 
-document.querySelectorAll("[data-prompt]").forEach(button => {
-  button.addEventListener("click", () => {
-    const prompt = button.getAttribute("data-prompt");
-    if (!prompt) return;
-    input.value = prompt;
-    input.focus();
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-});
+attachPromptButtons(document);
 
 window.addEventListener("online", checkBuddyConnection);
 window.addEventListener("offline", () => setConnectionState("offline", "No internet"));
