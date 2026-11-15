@@ -116,6 +116,8 @@ button:focus-visible, input:focus-visible {
 .connection-pill[data-state="online"] { border-color: rgba(105, 241, 223, .28); color: #a8f4e9; }
 .connection-pill[data-state="online"] .connection-dot { background: var(--accent); }
 .connection-pill[data-state="offline"] { border-color: rgba(255, 132, 151, .35); color: #ffc0c9; }
+.connection-pill[data-state="degraded"] { border-color: rgba(232, 189, 101, .38); color: #f2d59a; }
+.connection-pill[data-state="degraded"] .connection-dot { background: #e8bd65; }
 .connection-pill[data-state="offline"] .connection-dot { background: var(--danger); }
 .toolbar {
   display: flex;
