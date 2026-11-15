@@ -36,6 +36,10 @@ const MEMORY_RECORD_LIMIT = 60;
 const GEMINI_TIMEOUT_MS = 45000;
 const SUPABASE_TIMEOUT_MS = 10000;
 const MEMORY_ANALYSIS_TIMEOUT_MS = 12000;
+const MEMORY_CACHE_TTL_MS = 60 * 1000;
+let memoryCache = null;
+let memoryCacheExpiresAt = 0;
+let memoryRefreshPromise = null;
 
 const DATABASE_CONFIGURED = Boolean(
   SUPABASE_URL && SUPABASE_SECRET_KEY
@@ -284,79 +288,140 @@ function supabaseHeaders(extraHeaders = {}) {
   return headers;
 }
 
-async function getMemories() {
-  const emptyResult = {
-    promptText: 'No saved memories are available.',
-    existingFacts: []
-  };
 
-  if (!DATABASE_CONFIGURED) {
-    return emptyResult;
+function memorySnapshot() {
+  if (!memoryCache) {
+    return {
+      promptText: 'No saved memories are available.',
+      existingFacts: []
+    };
   }
 
-  try {
-    const factsUrl = new URL(`${SUPABASE_URL}/rest/v1/memories`);
-    factsUrl.searchParams.set('select', 'content,created_at');
-    factsUrl.searchParams.set('content', 'like.FACT:%');
-    factsUrl.searchParams.set('order', 'created_at.desc');
-    factsUrl.searchParams.set('limit', String(MEMORY_RECORD_LIMIT));
+  return {
+    promptText: memoryCache.promptText,
+    existingFacts: [...memoryCache.existingFacts]
+  };
+}
 
-    const factsResponse = await fetch(factsUrl, {
-      method: 'GET',
-      headers: supabaseHeaders(),
-      signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
-    });
-    if (!factsResponse.ok) {
-      const detail = await factsResponse.text().catch(() => '');
-      throw new Error(
-        `Supabase fact retrieval failed (${factsResponse.status}): ${detail.slice(0, 500)}`
-      );
+async function refreshMemories() {
+  if (memoryRefreshPromise) return memoryRefreshPromise;
+
+  memoryRefreshPromise = (async () => {
+    const emptyResult = {
+      promptText: 'No saved memories are available.',
+      existingFacts: []
+    };
+
+    if (!DATABASE_CONFIGURED) {
+      memoryCache = emptyResult;
+      memoryCacheExpiresAt = Date.now() + MEMORY_CACHE_TTL_MS;
+      return memorySnapshot();
     }
 
-    const factRows = await factsResponse.json();
+    try {
+      const factsUrl = new URL(SUPABASE_URL + '/rest/v1/memories');
+      factsUrl.searchParams.set('select', 'content,created_at');
+      factsUrl.searchParams.set('content', 'like.FACT:%');
+      factsUrl.searchParams.set('order', 'created_at.desc');
+      factsUrl.searchParams.set('limit', String(MEMORY_RECORD_LIMIT));
 
-    if (!Array.isArray(factRows)) {
-      throw new Error('Supabase returned an invalid memories response.');
-    }
-
-    const validFacts = factRows.filter(row =>
-      row && typeof row.content === 'string' && row.content.trim()
-    );
-
-    const existingFacts = validFacts.map(row =>
-      row.content.replace(/^FACT:\s*/i, '').trim()
-    );
-
-    const factLines = [];
-    let factCharacters = 0;
-    const FACT_CHAR_LIMIT = 12000;
-    for (const row of validFacts) {
-      const date = row.created_at ? ` [${row.created_at}]` : '';
-      const line = `${row.content}${date}`;
-      const nextLength = line.length + 2;
-
-      if (factCharacters + nextLength > FACT_CHAR_LIMIT) {
-        break;
+      const factsResponse = await fetch(factsUrl, {
+        method: 'GET',
+        headers: supabaseHeaders(),
+        signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
+      });
+      if (!factsResponse.ok) {
+        const detail = await factsResponse.text().catch(() => '');
+        throw new Error('Supabase fact retrieval failed (' + factsResponse.status + '): ' + detail.slice(0, 500));
       }
 
-      factLines.push(line);
-      factCharacters += nextLength;
+      const factRows = await factsResponse.json();
+      if (!Array.isArray(factRows)) {
+        throw new Error('Supabase returned an invalid memories response.');
+      }
+
+      const validFacts = factRows.filter(row =>
+        row && typeof row.content === 'string' && row.content.trim()
+      );
+      const existingFacts = validFacts.map(row =>
+        row.content.replace(/^FACT:[ \t]*/i, '').trim()
+      );
+
+      // Keep all retrieved facts for duplicate checks, but send only the
+      // newest 5 KB of memory text with each prompt.
+      const factLines = [];
+      let factCharacters = 0;
+      const FACT_CHAR_LIMIT = 5000;
+      for (const row of validFacts) {
+        const date = row.created_at ? ' [' + row.created_at + ']' : '';
+        const line = row.content + date;
+        const nextLength = line.length + 2;
+        if (factCharacters + nextLength > FACT_CHAR_LIMIT) break;
+        factLines.push(line);
+        factCharacters += nextLength;
+      }
+
+      memoryCache = {
+        promptText: [
+          'IMPORTANT PERSONAL FACTS (newest records first):',
+          factLines.join('\n\n') || 'No extracted personal facts yet.'
+        ].join('\n').slice(0, 7000),
+        existingFacts
+      };
+      memoryCacheExpiresAt = Date.now() + MEMORY_CACHE_TTL_MS;
+      return memorySnapshot();
+    } catch (error) {
+      console.error('Memory retrieval failed:', error.message);
+      if (!memoryCache) memoryCache = emptyResult;
+      memoryCacheExpiresAt = Date.now() + 10 * 1000;
+      return memorySnapshot();
     }
+  })().finally(() => {
+    memoryRefreshPromise = null;
+  });
 
-    const promptText = [
-      'IMPORTANT PERSONAL FACTS (newest records first):',
-      factLines.join('\n\n') || 'No extracted personal facts yet.'
-    ].join('\n');
-
-    return {
-      promptText: promptText.slice(0, 20000),
-      existingFacts
-    };
-  } catch (error) {
-    console.error('Memory retrieval failed:', error.message);
-    return emptyResult;
-  }
+  return memoryRefreshPromise;
 }
+
+function getMemories() {
+  if (memoryCache && Date.now() < memoryCacheExpiresAt) {
+    return Promise.resolve(memorySnapshot());
+  }
+
+  if (memoryCache) {
+    // Stale-while-revalidate keeps a chat moving while the cache refreshes.
+    void refreshMemories();
+    return Promise.resolve(memorySnapshot());
+  }
+
+  return refreshMemories();
+}
+
+function appendFactsToMemoryCache(facts) {
+  if (!memoryCache || !Array.isArray(facts)) return;
+
+  const known = new Set(memoryCache.existingFacts.map(normalizeMemoryText));
+  for (const fact of facts) {
+    if (typeof fact !== 'string' || !fact.trim()) continue;
+    const normalized = normalizeMemoryText(fact);
+    if (!normalized || known.has(normalized)) continue;
+    memoryCache.existingFacts.unshift(fact.trim());
+    known.add(normalized);
+  }
+
+  const lines = memoryCache.existingFacts
+    .slice(0, MEMORY_RECORD_LIMIT)
+    .map(fact => 'FACT: ' + fact);
+  memoryCache.promptText = [
+    'IMPORTANT PERSONAL FACTS (newest records first):',
+    lines.join('\n\n') || 'No extracted personal facts yet.'
+  ].join('\n').slice(0, 7000);
+  memoryCacheExpiresAt = Date.now() + MEMORY_CACHE_TTL_MS;
+}
+
+// Warm the cache during startup rather than making every first chat wait
+// for a separate Supabase read.
+void refreshMemories();
 
 async function saveToSupabase(content) {
   if (!DATABASE_CONFIGURED) {
@@ -519,6 +584,9 @@ app.patch('/api/memories/:id', requireAccess, async (req, res) => {
       return res.status(404).json({ error: 'That personal memory was not found.' });
     }
 
+    memoryCache = null;
+    memoryCacheExpiresAt = 0;
+
     return res.json({
       memory: {
         id: rows[0].id,
@@ -563,6 +631,8 @@ app.delete('/api/memories/:id', requireAccess, async (req, res) => {
       return res.status(404).json({ error: 'That personal memory was not found.' });
     }
 
+    memoryCache = null;
+    memoryCacheExpiresAt = 0;
     return res.json({ deleted: true, id: rows[0].id });
   } catch (error) {
     console.error('Memory deletion failed:', error.message);
@@ -964,6 +1034,12 @@ ACCURACY:
 - Distinguish facts from assumptions.
 - Give practical, useful answers.
 
+RESPONSE SPEED AND CLARITY:
+- Start with the direct answer; avoid long introductions.
+- Keep ordinary answers concise and easy to scan.
+- Expand fully when the user asks for detail or the topic requires it.
+- Do not repeat the user's question or add unnecessary closing remarks.
+
 Your goal is to be a reliable, intelligent, and genuinely helpful personal AI companion.
 `;
 
@@ -1184,6 +1260,9 @@ app.post('/api/chat', requireAccess, async (req, res) => {
     }
   };
 
+  const requestStartedAt = Date.now();
+  let firstTokenLogged = false;
+
   res.on('close', handleDisconnect);
 
   try {
@@ -1212,6 +1291,7 @@ app.post('/api/chat', requireAccess, async (req, res) => {
 
     const history = normalizeHistory(req.body?.history);
     const savedMemories = await getMemories();
+    console.info('Chat context ready in ' + (Date.now() - requestStartedAt) + 'ms.');
 
     // Save explicit memory requests before calling Gemini. This is important:
     // even if Gemini is over quota or unavailable, the user's direct request
@@ -1232,8 +1312,13 @@ app.post('/api/chat', requireAccess, async (req, res) => {
         try {
           await saveExtractedFactsToSupabase([explicitMemory]);
           explicitMemorySaved = true;
-          savedMemories.existingFacts.push(explicitMemory);
-          savedMemories.promptText += `\n\nNEWLY SAVED USER MEMORY:\nFACT: ${explicitMemory}`;
+          savedMemories.existingFacts.unshift(explicitMemory);
+          savedMemories.promptText = ('IMPORTANT PERSONAL FACTS (newest records first):\nFACT: ' + explicitMemory + '\n\n' + savedMemories.promptText).slice(0, 7000);
+          memoryCache = {
+            promptText: savedMemories.promptText,
+            existingFacts: [...savedMemories.existingFacts]
+          };
+          memoryCacheExpiresAt = Date.now() + MEMORY_CACHE_TTL_MS;
           console.log('Saved an explicitly requested personal memory.');
         } catch (error) {
           console.error('Explicit personal memory saving failed:', error.message);
@@ -1292,6 +1377,8 @@ app.post('/api/chat', requireAccess, async (req, res) => {
         signal: controller.signal
       }
     );
+
+    console.info('Gemini response headers arrived after ' + (Date.now() - requestStartedAt) + 'ms (HTTP ' + geminiResponse.status + ').');
 
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text().catch(() => '');
@@ -1369,6 +1456,10 @@ app.post('/api/chat', requireAccess, async (req, res) => {
     const reply = await readGeminiStream(
       geminiResponse.body,
       async text => {
+        if (!firstTokenLogged) {
+          firstTokenLogged = true;
+          console.info('Gemini first text arrived after ' + (Date.now() - requestStartedAt) + 'ms.');
+        }
         if (clientDisconnected) {
           throw new Error('Client disconnected.');
         }
@@ -1396,7 +1487,7 @@ app.post('/api/chat', requireAccess, async (req, res) => {
       return;
     }
 
-    console.info(`Gemini response stream completed successfully (${reply.length} characters).`);
+    console.info('Gemini response completed in ' + (Date.now() - requestStartedAt) + 'ms (' + reply.length + ' characters).');
 
     if (!reply.trim()) {
       await sendSSE(res, {
@@ -1410,64 +1501,55 @@ app.post('/api/chat', requireAccess, async (req, res) => {
       return;
     }
 
-    // Finish the user's response before slower background memory work.
-    // This keeps the chat UI responsive while Supabase saves continue.
-    const doneWritten = await writeChunk(res, 'data: [DONE]\n\n');
 
+    // Send the finished answer first. Transcript persistence and optional
+    // memory analysis are detached so they cannot delay the next chat turn.
+    const doneWritten = await writeChunk(res, 'data: [DONE]\n\n');
     if (!doneWritten || res.writableEnded || res.destroyed) {
       clientDisconnected = true;
       return;
     }
-
     res.end();
 
-    try {
-      await saveToSupabase(serializeConversation(message, reply, conversationId));
-    } catch (error) {
-      console.error('Conversation saving failed:', error.message);
-    }
-
-    if (clientDisconnected) {
-      return;
-    }
-
-    // Collect recent user messages before checking the memory trigger.
-    // This lets the trigger detect personal or emotional context spread
-    // across the latest message and the previous four user messages.
     const recentUserMessages = history
       .filter(item => item.role === 'user')
       .slice(-4)
       .map(item => item.parts?.[0]?.text || '')
       .filter(Boolean);
-
-    if (
+    const shouldExtractMemory =
       DATABASE_CONFIGURED &&
       !explicitMemory &&
-      shouldAnalyzeForMemory(message, recentUserMessages)
-    ) {
-      const extractedFacts = await extractImportantMemories(
-        message,
-        recentUserMessages,
-        savedMemories.existingFacts
-      );
+      shouldAnalyzeForMemory(message, recentUserMessages);
+    const factsForAnalysis = [...savedMemories.existingFacts];
 
-      if (extractedFacts.length > 0 && !clientDisconnected) {
+    setImmediate(() => {
+      void (async () => {
+        try {
+          await saveToSupabase(serializeConversation(message, reply, conversationId));
+        } catch (error) {
+          console.error('Conversation saving failed:', error.message);
+        }
+
+        if (!shouldExtractMemory) return;
+
+        const extractedFacts = await extractImportantMemories(
+          message,
+          recentUserMessages,
+          factsForAnalysis
+        );
+        if (extractedFacts.length === 0) return;
+
         try {
           await saveExtractedFactsToSupabase(extractedFacts);
-
-          console.log(
-            `Saved ${extractedFacts.length} personal memory record(s).`
-          );
+          appendFactsToMemoryCache(extractedFacts);
+          console.log('Saved ' + extractedFacts.length + ' personal memory record(s).');
         } catch (error) {
           console.error('Personal memory saving failed:', error.message);
         }
-      }
-    }
-
-    if (clientDisconnected) {
-      return;
-    }
-
+      })().catch(error => {
+        console.error('Background conversation processing failed:', error.message);
+      });
+    });
 
   } catch (error) {
     if (timeoutHandle) {
