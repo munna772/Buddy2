@@ -31,11 +31,14 @@
     <nav class="toolbar" aria-label="Buddy tools">
       <span class="toolbar-label">WORKSPACE</span>
       <div class="toolbar-actions">
+        <button id="toggle-chats" class="tool-button mobile-chat-toggle" type="button" aria-controls="conversation-sidebar" aria-expanded="false">
+          <span class="tool-icon" aria-hidden="true">☷</span><span>Chats</span>
+        </button>
         <button id="view-memories" class="tool-button" type="button" aria-controls="memories-panel" aria-expanded="false">
           <span class="tool-icon" aria-hidden="true">✧</span><span>Memories</span>
         </button>
         <button id="load-history" class="tool-button" type="button">
-          <span class="tool-icon" aria-hidden="true">◷</span><span>History</span>
+          <span class="tool-icon" aria-hidden="true">◷</span><span>Refresh</span>
         </button>
         <button id="manage-access" class="tool-button access-button" type="button">
           <span class="tool-icon" aria-hidden="true">⌑</span><span>Access</span>
@@ -43,47 +46,48 @@
       </div>
     </nav>
 
-    <p id="history-status" class="inline-status" role="status" aria-live="polite"></p>
-
-    <section id="memories-panel" class="memories-panel" hidden aria-live="polite">
-      <div class="section-heading">
-        <div>
-          <span class="eyebrow">LONG-TERM CONTEXT</span>
-          <h2>Saved memories</h2>
-          <p id="memories-status">Personal details Buddy can use when relevant.</p>
+    <div class="chat-layout" id="chat-layout">
+      <aside class="conversation-sidebar" id="conversation-sidebar" aria-label="Your conversations">
+        <div class="sidebar-heading">
+          <div><span class="eyebrow">YOUR SPACE</span><h2>Chats</h2></div>
+          <button id="new-chat" class="new-chat-button" type="button"><span aria-hidden="true">＋</span> New chat</button>
         </div>
-        <span class="section-mark" aria-hidden="true">✦</span>
-      </div>
-      <div id="memories-list" class="memories-list"></div>
-    </section>
-
-    <section id="chat" class="chat" aria-label="Conversation with Buddy" aria-live="polite" aria-relevant="additions text">
-      <div class="welcome" id="welcome">
-        <div class="welcome-orbit" aria-hidden="true"><span class="welcome-mark">B</span><i></i></div>
-        <span class="eyebrow">YOUR SPACE. YOUR BUDDY.</span>
-        <h2>Ready when you are.</h2>
-        <p>Think out loud, ask anything, or pick up where you left off.</p>
-        <div class="welcome-suggestions" aria-label="Suggested messages">
-          <button type="button" data-prompt="Help me understand something difficult.">✧ <span>Explain something</span></button>
-          <button type="button" data-prompt="Help me organise my thoughts and make a plan.">◈ <span>Make a plan</span></button>
-          <button type="button" data-prompt="I want to talk something through.">☾ <span>Talk it through</span></button>
+        <div id="conversation-list" class="conversation-list" role="list" aria-label="Saved conversations">
+          <p class="conversation-empty">Loading your chats…</p>
         </div>
+      </aside>
+      <div class="chat-main">
+        <p id="history-status" class="inline-status" role="status" aria-live="polite"></p>
+        <section id="memories-panel" class="memories-panel" hidden aria-live="polite">
+          <div class="section-heading">
+            <div><span class="eyebrow">LONG-TERM CONTEXT</span><h2>Saved memories</h2><p id="memories-status">Personal details Buddy can use when relevant.</p></div>
+            <span class="section-mark" aria-hidden="true">✦</span>
+          </div>
+          <div id="memories-list" class="memories-list"></div>
+        </section>
+        <section id="chat" class="chat" aria-label="Conversation with Buddy" aria-live="polite" aria-relevant="additions text">
+          <div class="welcome" id="welcome">
+            <div class="welcome-orbit" aria-hidden="true"><span class="welcome-mark">B</span><i></i></div>
+            <span class="eyebrow">YOUR SPACE. YOUR BUDDY.</span>
+            <h2>Ready when you are.</h2>
+            <p>Think out loud, ask anything, or start a fresh conversation.</p>
+            <div class="welcome-suggestions" aria-label="Suggested messages">
+              <button type="button" data-prompt="Help me understand something difficult.">✧ <span>Explain something</span></button>
+              <button type="button" data-prompt="Help me organise my thoughts and make a plan.">◈ <span>Make a plan</span></button>
+              <button type="button" data-prompt="I want to talk something through.">☾ <span>Talk it through</span></button>
+            </div>
+          </div>
+        </section>
+        <form id="chat-form" autocomplete="off">
+          <div class="composer-shell"><div class="composer">
+            <span class="composer-spark" aria-hidden="true">✧</span>
+            <input id="message" name="message" type="text" maxlength="4000" autocomplete="off" placeholder="Message Buddy..." aria-label="Message Buddy" required>
+            <span class="message-count" id="message-count" aria-live="off">0 / 4000</span>
+            <button id="send" type="submit" aria-label="Send message"><span>Send</span><b aria-hidden="true">↗</b></button>
+          </div><p class="composer-note"><span class="note-pulse" aria-hidden="true"></span> PRIVATE SESSION <span class="note-divider">·</span> GEMINI-POWERED</p></div>
+        </form>
       </div>
-    </section>
-
-    <form id="chat-form" autocomplete="off">
-      <div class="composer-shell">
-        <div class="composer">
-          <span class="composer-spark" aria-hidden="true">✧</span>
-          <input id="message" name="message" type="text" maxlength="4000" autocomplete="off" placeholder="Message Buddy..." aria-label="Message Buddy" required>
-          <span class="message-count" id="message-count" aria-live="off">0 / 4000</span>
-          <button id="send" type="submit" aria-label="Send message">
-            <span>Send</span><b aria-hidden="true">↗</b>
-          </button>
-        </div>
-        <p class="composer-note"><span class="note-pulse" aria-hidden="true"></span> PRIVATE SESSION <span class="note-divider">·</span> GEMINI-POWERED</p>
-      </div>
-    </form>
+    </div>
   </main>
 
   <dialog id="access-dialog" class="access-dialog" aria-labelledby="access-title">
