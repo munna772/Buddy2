@@ -5,6 +5,7 @@ const { spawn } = require('node:child_process');
 const path = require('node:path');
 const { stripFactPrefix, parseMemoryExtraction } = require('../memory-utils');
 const { parseConversationRecord, serializeConversation, formatConversationRecord, groupConversationRows } = require('../conversation-utils');
+const { readGeminiStream } = require('../gemini-stream');
 const { createServer } = require('node:net');
 const { readFileSync } = require('node:fs');
 const { after, before, test } = require('node:test');
@@ -216,6 +217,47 @@ test('conversation IDs are serialized as version 2 records and malformed IDs fal
   assert.match(serializeConversation('Hello', 'Hi', 'bad id'), /^CHAT_V1:/);
 });
 
+test('Gemini stream parser preserves text and detects MAX_TOKENS finish reason', async () => {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(
+        'data: {"candidates":[{"content":{"parts":[{"text":"This is only the beginning."}]}}]}\\r\\n\\r\\n'
+      ));
+      controller.enqueue(encoder.encode(
+        'data: {"candidates":[{"finishReason":"MAX_TOKENS","finishMessage":"Output token limit reached."}]}\\r\\n\\r\\n'
+      ));
+      controller.close();
+    }
+  });
+
+  let streamed = '';
+  const result = await readGeminiStream(stream, async text => { streamed += text; });
+  assert.equal(result.text, 'This is only the beginning.');
+  assert.equal(streamed, result.text);
+  assert.equal(result.finishReason, 'MAX_TOKENS');
+  assert.match(result.finishMessage, /token limit/i);
+});
+
+test('Gemini stream parser handles chunk-split SSE boundaries and natural STOP finish', async () => {
+  const encoder = new TextEncoder();
+  const chunks = [
+    'data: {"candidates":[{"content":{"parts":[{"text":"Complete"}]}}]}\\r',
+    '\\n\\r',
+    '\\ndata: {"candidates":[{"finishReason":"STOP"}]}\\n\\n'
+  ];
+  const stream = new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    }
+  });
+
+  const result = await readGeminiStream(stream, async () => {});
+  assert.equal(result.text, 'Complete');
+  assert.equal(result.finishReason, 'STOP');
+});
+
 test('memory extraction parser repairs malformed JSON returned by Gemini', () => {
   assert.deepEqual(
     parseMemoryExtraction('```json\n{"memories":["User said "I like this" yesterday",]}\n```'),
@@ -260,6 +302,11 @@ test('serves the refreshed accessible text-only Buddy interface', async () => {
   assert.match(serverScript, /Chat context ready in/);
   assert.match(serverScript, /setImmediate\(\(\) =>/);
   assert.match(serverScript, /Background conversation processing failed/);
+  assert.match(serverScript, /MAX_OUTPUT_TOKENS = 4096/);
+  assert.match(serverScript, /MAX_RESPONSE_CONTINUATIONS = 2/);
+  assert.match(serverScript, /finishReason=|finishReason=/);
+  assert.match(serverScript, /Continue your previous answer from exactly where it stopped/);
+  assert.match(serverScript, /Give a complete answer that covers every part/);
 
   const stylesheet = await (await fetch(`${baseUrl}/style.css`)).text();
   assert.match(stylesheet, /--accent: #69f1df/);
