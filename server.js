@@ -7,7 +7,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { randomUUID, timingSafeEqual } = require('crypto');
 const { stripFactPrefix, parseMemoryExtraction } = require('./memory-utils');
-const { parseConversationRecord, serializeConversation, formatConversationRecord } = require('./conversation-utils');
+const { parseConversationRecord, serializeConversation, groupConversationRows } = require('./conversation-utils');
 
 const app = express();
 
@@ -301,24 +301,11 @@ async function getMemories() {
     factsUrl.searchParams.set('order', 'created_at.desc');
     factsUrl.searchParams.set('limit', String(MEMORY_RECORD_LIMIT));
 
-    const conversationsUrl = new URL(`${SUPABASE_URL}/rest/v1/memories`);
-    conversationsUrl.searchParams.set('select', 'content,created_at');
-    conversationsUrl.searchParams.set('content', 'not.like.FACT:%');
-    conversationsUrl.searchParams.set('order', 'created_at.desc');
-    conversationsUrl.searchParams.set('limit', '12');
-
-    const [factsResponse, conversationsResponse] = await Promise.all([
-      fetch(factsUrl, {
-        method: 'GET',
-        headers: supabaseHeaders(),
-        signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
-      }),
-      fetch(conversationsUrl, {
-        method: 'GET',
-        headers: supabaseHeaders(),
-        signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
-      })
-    ]);
+    const factsResponse = await fetch(factsUrl, {
+      method: 'GET',
+      headers: supabaseHeaders(),
+      signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS)
+    });
     if (!factsResponse.ok) {
       const detail = await factsResponse.text().catch(() => '');
       throw new Error(
@@ -326,27 +313,13 @@ async function getMemories() {
       );
     }
 
-    if (!conversationsResponse.ok) {
-      const detail = await conversationsResponse.text().catch(() => '');
-      throw new Error(
-        `Supabase conversation retrieval failed (${conversationsResponse.status}): ${detail.slice(0, 500)}`
-      );
-    }
+    const factRows = await factsResponse.json();
 
-    const [factRows, conversationRows] = await Promise.all([
-      factsResponse.json(),
-      conversationsResponse.json()
-    ]);
-
-    if (!Array.isArray(factRows) || !Array.isArray(conversationRows)) {
+    if (!Array.isArray(factRows)) {
       throw new Error('Supabase returned an invalid memories response.');
     }
 
     const validFacts = factRows.filter(row =>
-      row && typeof row.content === 'string' && row.content.trim()
-    );
-
-    const validConversations = conversationRows.filter(row =>
       row && typeof row.content === 'string' && row.content.trim()
     );
 
@@ -370,22 +343,9 @@ async function getMemories() {
       factCharacters += nextLength;
     }
 
-    const conversationText = validConversations
-      .reverse()
-      .map(row => {
-        const content = formatConversationRecord(row.content);
-        const date = row.created_at ? ` [${row.created_at}]` : '';
-        return `${content}${date}`;
-      })
-      .join('\n\n')
-      .slice(-7000);
-
     const promptText = [
       'IMPORTANT PERSONAL FACTS (newest records first):',
-      factLines.join('\n\n') || 'No extracted personal facts yet.',
-      '',
-      'RECENT CONVERSATION HISTORY (oldest to newest):',
-      conversationText || 'No recent conversation records available.'
+      factLines.join('\n\n') || 'No extracted personal facts yet.'
     ].join('\n');
 
     return {
@@ -626,7 +586,7 @@ app.get('/api/history', requireAccess, async (_req, res) => {
     historyUrl.searchParams.set('select', 'id,content,created_at');
     historyUrl.searchParams.set('content', 'not.like.FACT:%');
     historyUrl.searchParams.set('order', 'created_at.desc');
-    historyUrl.searchParams.set('limit', '50');
+    historyUrl.searchParams.set('limit', '500');
 
     const response = await fetch(historyUrl, {
       method: 'GET',
@@ -644,20 +604,16 @@ app.get('/api/history', requireAccess, async (_req, res) => {
       throw new Error('Supabase returned an invalid conversation history.');
     }
 
-    const conversations = rows
-      .filter(row =>
-        row &&
-        typeof row.id === 'string' &&
-        typeof row.content === 'string' &&
-        parseConversationRecord(row.content) !== null
-      )
-      .map(row => ({
-        id: row.id,
-        content: row.content,
-        created_at: row.created_at || null
-      }));
+    const validRows = rows.filter(row =>
+      row &&
+      typeof row.id === 'string' &&
+      typeof row.content === 'string' &&
+      parseConversationRecord(row.content) !== null
+    );
 
-    return res.json({ conversations });
+    return res.json({
+      conversations: groupConversationRows(validRows)
+    });
   } catch (error) {
     console.error('Conversation history loading failed:', error.message);
     return res.status(502).json({
@@ -1248,6 +1204,12 @@ app.post('/api/chat', requireAccess, async (req, res) => {
       });
     }
 
+    const requestedConversationId = req.body?.conversationId;
+    const conversationId = typeof requestedConversationId === 'string' &&
+      /^[a-zA-Z0-9_-]{8,80}$/.test(requestedConversationId)
+      ? requestedConversationId
+      : randomUUID();
+
     const history = normalizeHistory(req.body?.history);
     const savedMemories = await getMemories();
 
@@ -1460,7 +1422,7 @@ app.post('/api/chat', requireAccess, async (req, res) => {
     res.end();
 
     try {
-      await saveToSupabase(serializeConversation(message, reply));
+      await saveToSupabase(serializeConversation(message, reply, conversationId));
     } catch (error) {
       console.error('Conversation saving failed:', error.message);
     }
