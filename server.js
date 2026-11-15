@@ -1280,9 +1280,12 @@ app.post('/api/chat', requireAccess, async (req, res) => {
     }
 
     if (GEMINI_API_KEYS.length === 0) {
-      return res.status(500).json({
-        error: 'The memory request was checked, but Buddy has no Gemini API key configured.'
-      });
+      const error = explicitMemorySaved
+        ? 'I saved that memory, but Buddy cannot reply because no Gemini API key is configured.'
+        : explicitMemory
+          ? 'Buddy cannot reply because no Gemini API key is configured, and I could not confirm that memory was saved.'
+          : 'Buddy has no Gemini API key configured.';
+      return res.status(503).json({ error });
     }
 
     if (clientDisconnected) {
@@ -1350,7 +1353,9 @@ app.post('/api/chat', requireAccess, async (req, res) => {
         geminiError?.status === 'RESOURCE_EXHAUSTED'
       ) {
         return res.status(429).json({
-          error: 'Buddy has reached the Gemini usage limit. Please try again later.'
+          error: explicitMemorySaved
+            ? 'I saved that memory, but Buddy has reached the Gemini usage limit. Please try again later.'
+            : 'Buddy has reached the Gemini usage limit. Please try again later.'
         });
       }
 
@@ -1359,18 +1364,24 @@ app.post('/api/chat', requireAccess, async (req, res) => {
         geminiResponse.status === 403
       ) {
         return res.status(502).json({
-          error: 'Gemini rejected the API key or project permissions. Check the server configuration.'
+          error: explicitMemorySaved
+            ? 'I saved that memory, but Gemini rejected the API key or project permissions. Check the server configuration.'
+            : 'Gemini rejected the API key or project permissions. Check the server configuration.'
         });
       }
 
       if (geminiResponse.status >= 500) {
         return res.status(503).json({
-          error: 'Gemini is temporarily unavailable. Please try again later.'
+          error: explicitMemorySaved
+            ? 'I saved that memory, but Gemini is temporarily unavailable. Please try again later.'
+            : 'Gemini is temporarily unavailable. Please try again later.'
         });
       }
 
       return res.status(502).json({
-        error: 'Gemini could not process this request. Check the server logs for details.'
+        error: explicitMemorySaved
+          ? 'I saved that memory, but Gemini could not process this request. Please try again later.'
+          : 'Gemini could not process this request. Check the server logs for details.'
       });
     }
 
