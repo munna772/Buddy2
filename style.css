@@ -16,6 +16,24 @@
   --shadow: 0 28px 90px rgba(0, 0, 0, .48);
 }
 * { box-sizing: border-box; }
+/* Keep app chrome out of native Select all. Message bubbles remain selectable,
+   so selecting all text copies only the visible conversation, not the toolbar
+   or sidebar. */
+body, body * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+#chat .bubble {
+  -webkit-user-select: text;
+  user-select: text;
+}
+input, textarea, #chat .bubble {
+  -webkit-touch-callout: default;
+}
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
 html, body { width: 100%; min-height: 100%; }
 body {
   margin: 0;
