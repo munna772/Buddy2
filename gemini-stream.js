@@ -29,7 +29,7 @@ function parseGeminiData(dataText) {
   };
 }
 
-async function readGeminiStream(stream, onText) {
+async function readGeminiStream(stream, onText, { idleTimeoutMs = 45000 } = {}) {
   if (!stream) {
     throw new Error('Gemini did not return a response stream.');
   }
@@ -75,7 +75,23 @@ async function readGeminiStream(stream, onText) {
 
   try {
     while (true) {
-      const { value, done } = await reader.read();
+      let idleTimer;
+      let readResult;
+
+      try {
+        readResult = await Promise.race([
+          reader.read(),
+          new Promise((_, reject) => {
+            idleTimer = setTimeout(() => {
+              reject(new Error(`Gemini stream idle timeout: no data received for ${idleTimeoutMs}ms.`));
+            }, idleTimeoutMs);
+          })
+        ]);
+      } finally {
+        clearTimeout(idleTimer);
+      }
+
+      const { value, done } = readResult;
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
@@ -104,6 +120,13 @@ async function readGeminiStream(stream, onText) {
     await dispatchEvent();
 
     return { text: completeText, finishReason, finishMessage, blockReason };
+  } catch (error) {
+    try {
+      await reader.cancel(error);
+    } catch {
+      // The upstream stream may already be closed.
+    }
+    throw error;
   } finally {
     try {
       reader.releaseLock();
