@@ -6,6 +6,7 @@ const path = require('node:path');
 const { stripFactPrefix, parseMemoryExtraction } = require('../memory-utils');
 const { parseConversationRecord, serializeConversation, formatConversationRecord, groupConversationRows } = require('../conversation-utils');
 const { readGeminiStream } = require('../gemini-stream');
+const { fetchGeminiWithFallback } = require('../gemini-request');
 const { createServer } = require('node:net');
 const { readFileSync } = require('node:fs');
 const { after, before, test } = require('node:test');
@@ -217,6 +218,88 @@ test('conversation IDs are serialized as version 2 records and malformed IDs fal
   assert.match(serializeConversation('Hello', 'Hi', 'bad id'), /^CHAT_V1:/);
 });
 
+test('Gemini backup can win while a slower primary key is still connecting', async () => {
+  const started = [];
+  const aborted = [];
+  const apiKeys = [
+    { label: 'primary', key: 'primary-test-key' },
+    { label: 'backup 1', key: 'backup-one-test-key' },
+    { label: 'backup 2', key: 'backup-two-test-key' }
+  ];
+
+  const fakeFetch = (_url, options) => {
+    const label = apiKeys.find(item =>
+      item.key === options.headers['x-goog-api-key']
+    ).label;
+    started.push(label);
+
+    if (label === 'primary') {
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => {
+          aborted.push(label);
+          reject(new Error('cancelled after another key succeeded'));
+        }, { once: true });
+      });
+    }
+
+    if (label === 'backup 1') {
+      return new Promise(resolve => {
+        setTimeout(() => resolve(new Response('overloaded', { status: 503 })), 5);
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => resolve(new Response('working', { status: 200 })),
+        20
+      );
+      options.signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(new Error('cancelled'));
+      }, { once: true });
+    });
+  };
+
+  const response = await fetchGeminiWithFallback(
+    'https://example.test/generate',
+    { method: 'POST' },
+    {
+      apiKeys,
+      fetchImpl: fakeFetch,
+      connectTimeoutMs: 150,
+      staggerMs: 5,
+      logger: { info() {}, warn() {}, error() {} }
+    }
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'working');
+  assert.deepEqual(started, ['primary', 'backup 1', 'backup 2']);
+  assert.ok(aborted.includes('primary'));
+});
+
+test('Gemini fallback returns a useful HTTP error when every key is rejected', async () => {
+  const apiKeys = [
+    { label: 'primary', key: 'primary-test-key' },
+    { label: 'backup 1', key: 'backup-one-test-key' }
+  ];
+
+  const response = await fetchGeminiWithFallback(
+    'https://example.test/generate',
+    {},
+    {
+      apiKeys,
+      fetchImpl: async () => new Response('quota exceeded', { status: 429 }),
+      connectTimeoutMs: 100,
+      staggerMs: 0,
+      logger: { info() {}, warn() {}, error() {} }
+    }
+  );
+
+  assert.equal(response.status, 429);
+  assert.equal(await response.text(), 'quota exceeded');
+});
+
 test('Gemini stream parser preserves text and detects MAX_TOKENS finish reason', async () => {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -319,12 +402,13 @@ test('serves the refreshed accessible text-only Buddy interface', async () => {
   assert.match(serverScript, /Background conversation processing failed/);
   assert.match(serverScript, /MAX_OUTPUT_TOKENS = 4096/);
   assert.match(serverScript, /MAX_RESPONSE_CONTINUATIONS = 2/);
-  assert.match(serverScript, /GEMINI_CONNECT_TIMEOUT_MS = 15000/);
+  assert.match(serverScript, /GEMINI_CONNECT_TIMEOUT_MS = 30000/);
+  assert.match(serverScript, /GEMINI_FALLBACK_STAGGER_MS = 6000/);
   assert.match(serverScript, /GEMINI_STREAM_IDLE_TIMEOUT_MS = 45000/);
-  assert.match(serverScript, /AbortSignal.any/);
-  assert.doesNotMatch(serverScript, /GEMINI_TIMEOUT_MS = 90000/);
   assert.match(serverScript, /idleTimeoutMs: GEMINI_STREAM_IDLE_TIMEOUT_MS/);
-  assert.match(serverScript, /timed out before response headers/);
+  const requestHelper = readFileSync(path.join(__dirname, '..', 'gemini-request.js'), 'utf8');
+  assert.match(requestHelper, /Hedge the next key after a short delay/);
+  assert.match(requestHelper, /AbortSignal.any/);
   assert.match(serverScript, /finishReason=|finishReason=/);
   assert.match(serverScript, /Continue your previous answer from exactly where it stopped/);
   assert.match(serverScript, /Give a complete answer that covers every part/);
