@@ -7,6 +7,7 @@ const { stripFactPrefix, parseMemoryExtraction } = require('../memory-utils');
 const { parseConversationRecord, serializeConversation, formatConversationRecord, groupConversationRows } = require('../conversation-utils');
 const { readGeminiStream } = require('../gemini-stream');
 const { fetchGeminiWithFallback } = require('../gemini-request');
+const { createConversationCache, mergeConversationLists } = require('../chat-cache');
 const { createServer } = require('node:net');
 const { readFileSync } = require('node:fs');
 const { after, before, test } = require('node:test');
@@ -177,6 +178,71 @@ test('memory prefix normalization removes the FACT marker and preserves memory t
   assert.equal(stripFactPrefix('ordinary text'), 'ordinary text');
 });
 
+
+test('offline conversation cache persists conversations using local storage fallback', async () => {
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, String(value)); },
+    removeItem(key) { values.delete(key); }
+  };
+  const cache = createConversationCache({
+    getIndexedDB: () => null,
+    getLocalStorage: () => storage
+  });
+
+  const conversations = [{
+    id: 'chat_offline_123',
+    title: 'Offline conversation',
+    created_at: '2026-11-18T08:00:00Z',
+    updated_at: '2026-11-18T08:05:00Z',
+    messages: [{ userText: 'Remember this offline', buddyText: 'I can still show this saved reply.' }]
+  }];
+
+  assert.equal(await cache.save(conversations), true);
+  const restored = await cache.load();
+  assert.deepEqual(restored, conversations);
+});
+
+test('offline and server conversation lists merge without losing locally cached turns', () => {
+  const cached = [
+    {
+      id: 'chat_local_123',
+      title: 'Local copy',
+      updated_at: '2026-11-18T08:05:00Z',
+      messages: [
+        { userText: 'First', buddyText: 'Reply one' },
+        { userText: 'Second', buddyText: 'Reply two' }
+      ]
+    },
+    {
+      id: 'chat_only_local',
+      title: 'Only local',
+      updated_at: '2026-11-18T08:03:00Z',
+      messages: [{ userText: 'Offline only', buddyText: 'Cached reply' }]
+    }
+  ];
+  const remote = [
+    {
+      id: 'chat_local_123',
+      title: 'Server copy',
+      updated_at: '2026-11-18T08:06:00Z',
+      messages: [{ userText: 'First', buddyText: 'Reply one' }]
+    },
+    {
+      id: 'chat_remote_only',
+      title: 'Remote only',
+      updated_at: '2026-11-18T08:04:00Z',
+      messages: [{ userText: 'Online only', buddyText: 'Server reply' }]
+    }
+  ];
+
+  const merged = mergeConversationLists(remote, cached);
+  assert.equal(merged.length, 3);
+  assert.equal(merged.find(item => item.id === 'chat_local_123').messages.length, 2);
+  assert.ok(merged.some(item => item.id === 'chat_only_local'));
+  assert.ok(merged.some(item => item.id === 'chat_remote_only'));
+});
 
 test('versioned conversation records preserve separator text and legacy rows remain readable', () => {
   const user = 'Please analyse this exact text: \n\nBuddy: do not split here';
@@ -396,6 +462,21 @@ test('serves the refreshed accessible text-only Buddy interface', async () => {
   assert.match(appScript, /AI not configured/);
   assert.match(appScript, /function scheduleRender\(\)/);
   assert.match(appScript, /requestAnimationFrame\(flush\)/);
+  assert.match(appScript, /let activeConversationId = createConversationId\(\)/);
+  assert.match(appScript, /loadCachedConversations/);
+  assert.match(appScript, /saveCachedConversations/);
+  assert.match(appScript, /mergeConversationLists\(remoteConversations, savedConversations\)/);
+  assert.doesNotMatch(appScript, /localStorage\.getItem\(ACTIVE_CONVERSATION_KEY\)/);
+  assert.match(appScript, /current chat stays new/);
+
+  const cacheScript = readFileSync(path.join(__dirname, '..', 'chat-cache.js'), 'utf8');
+  assert.match(cacheScript, /indexedDB\.open/);
+  assert.match(cacheScript, /FALLBACK_STORAGE_KEY/);
+
+  const styles = readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(styles, /body, body \* \{[\s\S]*user-select: none/);
+  assert.match(styles, /#chat \.bubble \{[\s\S]*user-select: text/);
+
 
   const serverScript = readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(serverScript, /MEMORY_CACHE_TTL_MS = 60 \* 1000/);
