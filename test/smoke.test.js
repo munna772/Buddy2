@@ -13,6 +13,7 @@ const { after, before, test } = require('node:test');
 
 const ACCESS_TOKEN = 'buddy-test-token-1234567890-abcdefghijklmnopqrstuvwxyz';
 let child;
+let childLogs = '';
 let baseUrl;
 
 before(async () => {
@@ -36,12 +37,14 @@ before(async () => {
       SUPABASE_URL: '',
       SUPABASE_SECRET_KEY: ''
     },
-    stdio: 'ignore'
+    stdio: ['ignore', 'pipe', 'pipe']
   });
+  child.stdout.on('data', chunk => { childLogs += chunk.toString(); });
+  child.stderr.on('data', chunk => { childLogs += chunk.toString(); });
 
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (child.exitCode !== null) throw new Error('Buddy server exited before the smoke tests started.');
+    if (child.exitCode !== null) throw new Error('Buddy server exited before the smoke tests started.\n' + childLogs);
     try {
       const response = await fetch(`${baseUrl}/api/health`);
       if (response.ok) {
@@ -53,7 +56,7 @@ before(async () => {
     }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  if (!ready) throw new Error('Buddy server did not become ready for smoke tests.');
+  if (!ready) throw new Error('Buddy server did not become ready for smoke tests.\n' + childLogs);
 });
 
 after(() => {
