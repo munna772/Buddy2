@@ -1,4 +1,6 @@
 
+const { loadCachedConversations, saveCachedConversations, mergeConversationLists } = require("./chat-cache.js");
+
 const form = document.getElementById("chat-form");
 const input = document.getElementById("message");
 const send = document.getElementById("send");
@@ -318,8 +320,11 @@ const conversationList = document.getElementById("conversation-list");
 const newChatButton = document.getElementById("new-chat");
 const chatLayout = document.getElementById("chat-layout");
 const toggleChatsButton = document.getElementById("toggle-chats");
-const ACTIVE_CONVERSATION_KEY = "buddy_active_conversation";
-let activeConversationId = localStorage.getItem(ACTIVE_CONVERSATION_KEY) || null;
+// Each fresh app launch starts in a new conversation. Saved threads remain
+// available in the sidebar, but are never reopened automatically.
+const LEGACY_ACTIVE_CONVERSATION_KEY = "buddy_active_conversation";
+localStorage.removeItem(LEGACY_ACTIVE_CONVERSATION_KEY);
+let activeConversationId = createConversationId();
 let savedConversations = [];
 
 const welcomeTemplate = document.getElementById("welcome")?.cloneNode(true);
@@ -403,7 +408,6 @@ function openConversation(conversationId) {
   if (!conversation) return;
 
   activeConversationId = conversation.id;
-  localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
   history.length = 0;
   chat.replaceChildren();
 
@@ -436,7 +440,6 @@ function startNewChat() {
   }
 
   activeConversationId = createConversationId();
-  localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
   history.length = 0;
   showNewChatWelcome();
   if (historyStatus) historyStatus.textContent = "New conversation started.";
@@ -444,6 +447,27 @@ function startNewChat() {
   chatLayout?.classList.remove("sidebar-open");
   toggleChatsButton?.setAttribute("aria-expanded", "false");
   input.focus();
+}
+
+async function persistOfflineConversations() {
+  try {
+    await saveCachedConversations(savedConversations);
+  } catch (error) {
+    console.warn("Buddy could not update its offline chat cache:", error);
+  }
+}
+
+async function hydrateOfflineConversationList() {
+  try {
+    const cached = await loadCachedConversations();
+    savedConversations = mergeConversationLists(savedConversations, cached);
+    renderConversationList();
+    if (cached.length && navigator.onLine === false && historyStatus) {
+      historyStatus.textContent = "Offline mode: showing conversations saved on this device.";
+    }
+  } catch (error) {
+    console.warn("Buddy could not read its offline chat cache:", error);
+  }
 }
 
 async function loadConversationList(silent = false) {
@@ -461,7 +485,8 @@ async function loadConversationList(silent = false) {
     const token = getAccessToken();
     const response = await fetch("/api/history", {
       method: "GET",
-      headers: { "Authorization": `Bearer ${token}` }
+      headers: { "Authorization": `Bearer ${token}` },
+      cache: "no-store"
     });
 
     if (response.status === 401) {
@@ -474,26 +499,26 @@ async function loadConversationList(silent = false) {
       throw new Error(data.error || `Could not load chats (${response.status}).`);
     }
 
-    savedConversations = Array.isArray(data.conversations) ? data.conversations : [];
+    const remoteConversations = Array.isArray(data.conversations) ? data.conversations : [];
+    savedConversations = mergeConversationLists(remoteConversations, savedConversations);
+    await persistOfflineConversations();
     renderConversationList();
 
-    const selected = activeConversationId
-      ? savedConversations.find(item => item.id === activeConversationId)
-      : savedConversations[0];
-
-    if (selected) {
-      openConversation(selected.id);
-      if (!silent) historyStatus.textContent = `Loaded ${savedConversations.length} saved chat${savedConversations.length === 1 ? "" : "s"}.`;
-    } else {
-      history.length = 0;
-      showNewChatWelcome();
-      if (!silent) historyStatus.textContent = savedConversations.length
-        ? "This is a new chat. Your other conversations are in the list."
+    // Refreshing the list must not replace the current, intentionally new chat.
+    if (!silent) {
+      historyStatus.textContent = savedConversations.length
+        ? `Loaded ${savedConversations.length} saved chat${savedConversations.length === 1 ? "" : "s"}. Your current chat stays new.`
         : "No saved chats yet. Start a new conversation.";
     }
   } catch (error) {
-    if (!silent) historyStatus.textContent = error.message || "Could not load your chats.";
-    if (!savedConversations.length) renderConversationList();
+    if (!silent) {
+      historyStatus.textContent = savedConversations.length
+        ? "Could not sync with Buddy. Showing chats saved on this device."
+        : error.message || "Could not load your chats.";
+    } else if (savedConversations.length && historyStatus) {
+      historyStatus.textContent = "Offline mode: showing conversations saved on this device.";
+    }
+    renderConversationList();
   } finally {
     historyLoading = false;
     historyButton.disabled = false;
@@ -512,12 +537,17 @@ if (toggleChatsButton && chatLayout) {
   });
 }
 
-// Restore the last active thread when this device already has secure access.
-if (localStorage.getItem(TOKEN_STORAGE_KEY)) {
-  loadConversationList(true);
-} else {
-  renderConversationList();
-}
+// A page refresh always starts a clean conversation, while the sidebar
+// is hydrated from the local offline cache before attempting the network sync.
+history.length = 0;
+showNewChatWelcome();
+renderConversationList();
+void (async () => {
+  await hydrateOfflineConversationList();
+  if (localStorage.getItem(TOKEN_STORAGE_KEY)) {
+    await loadConversationList(true);
+  }
+})();
 // READ STREAMING RESPONSE
 // =====================================
 
@@ -755,7 +785,6 @@ form.addEventListener("submit", async (event) => {
     // Legacy rows had no thread ID. Continue them in a new thread rather
     // than merging new messages into the read-only legacy archive group.
     activeConversationId = createConversationId();
-    localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
   }
 
   if (message.length > MAX_MESSAGE_LENGTH) {
@@ -873,6 +902,9 @@ form.addEventListener("submit", async (event) => {
     currentConversation.updated_at = new Date().toISOString();
     savedConversations.sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
     renderConversationList();
+
+    // Persist every completed thread locally so it can be reopened without internet.
+    await persistOfflineConversations();
 
     // Keep recent history
     if (history.length > MAX_HISTORY) {
