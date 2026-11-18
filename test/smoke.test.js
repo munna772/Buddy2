@@ -239,6 +239,21 @@ test('Gemini stream parser preserves text and detects MAX_TOKENS finish reason',
   assert.match(result.finishMessage, /token limit/i);
 });
 
+test('Gemini stream parser cancels a response when upstream data stays idle', async () => {
+  let cancelled = false;
+  const stream = new ReadableStream({
+    cancel() {
+      cancelled = true;
+    }
+  });
+
+  await assert.rejects(
+    readGeminiStream(stream, async () => {}, { idleTimeoutMs: 20 }),
+    /stream idle timeout/i
+  );
+  assert.equal(cancelled, true);
+});
+
 test('Gemini stream parser handles chunk-split SSE boundaries and natural STOP finish', async () => {
   const encoder = new TextEncoder();
   const chunks = [
@@ -304,6 +319,12 @@ test('serves the refreshed accessible text-only Buddy interface', async () => {
   assert.match(serverScript, /Background conversation processing failed/);
   assert.match(serverScript, /MAX_OUTPUT_TOKENS = 4096/);
   assert.match(serverScript, /MAX_RESPONSE_CONTINUATIONS = 2/);
+  assert.match(serverScript, /GEMINI_CONNECT_TIMEOUT_MS = 15000/);
+  assert.match(serverScript, /GEMINI_STREAM_IDLE_TIMEOUT_MS = 45000/);
+  assert.match(serverScript, /AbortSignal.any/);
+  assert.doesNotMatch(serverScript, /GEMINI_TIMEOUT_MS = 90000/);
+  assert.match(serverScript, /idleTimeoutMs: GEMINI_STREAM_IDLE_TIMEOUT_MS/);
+  assert.match(serverScript, /timed out before response headers/);
   assert.match(serverScript, /finishReason=|finishReason=/);
   assert.match(serverScript, /Continue your previous answer from exactly where it stopped/);
   assert.match(serverScript, /Give a complete answer that covers every part/);
